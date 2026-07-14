@@ -1,0 +1,6 @@
+{
+  "name": "Habit Tracker",
+  "description": "An offline-first, highly motivating Habit Tracker app featuring interactive charts, smart notifications, streak milestones, and custom dark mode support to keep you aligned with your goals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
