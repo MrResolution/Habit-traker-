@@ -13,18 +13,47 @@ import com.example.ui.HabitViewModel
 import com.example.ui.screens.MainDashboard
 import com.example.ui.theme.MyApplicationTheme
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import com.example.ui.AuthState
+import com.example.ui.AuthViewModel
+import com.example.ui.screens.AuthScreen
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                val viewModel: HabitViewModel = viewModel()
+                val authViewModel: AuthViewModel = viewModel()
+                val habitViewModel: HabitViewModel = viewModel()
+                
+                val authState by authViewModel.authState.collectAsState()
+                
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    MainDashboard(
-                        viewModel = viewModel,
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                        when (authState) {
+                            is AuthState.Loading -> {
+                                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                            }
+                            is AuthState.NeedsRegistration -> {
+                                AuthScreen(viewModel = authViewModel, isRegistration = true)
+                            }
+                            is AuthState.NeedsLogin -> {
+                                AuthScreen(viewModel = authViewModel, isRegistration = false)
+                            }
+                            is AuthState.Authenticated -> {
+                                MainDashboard(
+                                    viewModel = habitViewModel,
+                                    modifier = Modifier.fillMaxSize(),
+                                    onLogout = { authViewModel.logout() }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

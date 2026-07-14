@@ -48,7 +48,8 @@ import java.util.*
 @Composable
 fun MainDashboard(
     viewModel: HabitViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLogout: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val habits by viewModel.habits.collectAsState()
@@ -105,6 +106,13 @@ fun MainDashboard(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onLogout) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Logout",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (activeTab == "today") {
                         IconButton(
                             onClick = { showAddHabitDialog = true },
