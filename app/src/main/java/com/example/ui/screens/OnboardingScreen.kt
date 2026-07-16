@@ -454,13 +454,14 @@ fun SelectableOptionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) NeonPurple.copy(alpha = 0.08f) else Color.White
         ),
         border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, NeonPurple) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 0.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -512,13 +513,14 @@ fun HabitSuggestionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onToggle() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) CyberTeal.copy(alpha = 0.06f) else Color.White
         ),
         border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, CyberTeal) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 3.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 0.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
