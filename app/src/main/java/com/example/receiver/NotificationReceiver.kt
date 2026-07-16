@@ -16,7 +16,6 @@ import com.example.R
 import java.util.Calendar
 
 import android.media.RingtoneManager
-import android.widget.RemoteViews
 import com.example.data.AppDatabase
 import com.example.data.HabitRepository
 import kotlinx.coroutines.CoroutineScope
@@ -105,15 +104,10 @@ class NotificationReceiver : BroadcastReceiver() {
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
-        // Custom Layout
-        val remoteViews = RemoteViews(context.packageName, R.layout.custom_notification)
-        remoteViews.setTextViewText(R.id.notification_title, "Goal Reminder: $habitName")
-        remoteViews.setTextViewText(R.id.notification_desc, habitDesc)
-
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-            .setCustomContentView(remoteViews)
+            .setContentTitle("Goal Reminder: $habitName")
+            .setContentText(habitDesc)
             .setColor(android.graphics.Color.parseColor("#9D4EDD")) // Custom Color (Neon Purple)
             .setSound(defaultSoundUri) // Custom Sound setup (using default for now)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
