@@ -449,11 +449,6 @@ fun SelectableOptionCard(
     label: String,
     icon: ImageVector,
     isSelected: Boolean,
-@Composable
-fun SelectableOptionCard(
-    label: String,
-    icon: ImageVector,
-    isSelected: Boolean,
     onClick: () -> Unit
 ) {
     Row(
