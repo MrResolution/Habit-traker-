@@ -29,6 +29,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
+import com.example.ui.screens.OnboardingScreen
+import com.example.ui.screens.OnboardingResult
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,7 @@ class MainActivity : ComponentActivity() {
                 val habitViewModel: HabitViewModel = viewModel()
                 
                 val authState by authViewModel.authState.collectAsState()
+                val isOnboardingComplete by themePreferences.isOnboardingComplete.collectAsState()
                 
                 Box(
                     modifier = Modifier
@@ -68,13 +72,45 @@ class MainActivity : ComponentActivity() {
                         }
                         is AuthState.Authenticated -> {
                             val user = (authState as AuthState.Authenticated).user
-                            MainDashboard(
-                                viewModel = habitViewModel,
-                                modifier = Modifier.fillMaxSize(),
-                                onLogout = { authViewModel.logout() },
-                                userName = user.displayName ?: "User",
-                                themePreferences = themePreferences
-                            )
+                            
+                            if (!isOnboardingComplete) {
+                                val isGoogleUser = user.providerData.any { it.providerId == "google.com" }
+                                OnboardingScreen(
+                                    initialDisplayName = user.displayName ?: "",
+                                    isGoogleUser = isGoogleUser,
+                                    onComplete = { result ->
+                                        // Save profile data
+                                        themePreferences.setGender(result.gender)
+                                        themePreferences.setProfession(result.profession)
+                                        themePreferences.setAvatarIndex(result.avatarIndex)
+                                        
+                                        // Create selected habits
+                                        result.selectedHabits.forEach { habitName ->
+                                            habitViewModel.addHabit(
+                                                name = habitName,
+                                                description = "Auto-created during onboarding",
+                                                category = result.profession,
+                                                frequency = "daily",
+                                                targetCount = 1,
+                                                reminderTime = null,
+                                                isNotificationEnabled = false,
+                                                context = context
+                                            )
+                                        }
+                                        
+                                        // Mark onboarding done
+                                        themePreferences.setOnboardingComplete(true)
+                                    }
+                                )
+                            } else {
+                                MainDashboard(
+                                    viewModel = habitViewModel,
+                                    modifier = Modifier.fillMaxSize(),
+                                    onLogout = { authViewModel.logout() },
+                                    userName = user.displayName ?: "User",
+                                    themePreferences = themePreferences
+                                )
+                            }
                         }
                     }
                 }

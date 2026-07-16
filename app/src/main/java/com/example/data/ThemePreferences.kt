@@ -48,4 +48,41 @@ class ThemePreferences(context: Context) {
         }
         _isAutoBackupEnabled.value = enabled
     }
+
+    // Onboarding
+    private val _isOnboardingComplete = MutableStateFlow(
+        prefs.getBoolean("onboarding_complete", false)
+    )
+    val isOnboardingComplete: StateFlow<Boolean> = _isOnboardingComplete.asStateFlow()
+
+    fun setOnboardingComplete(complete: Boolean) {
+        prefs.edit {
+            putBoolean("onboarding_complete", complete)
+        }
+        _isOnboardingComplete.value = complete
+    }
+
+    private val _gender = MutableStateFlow(
+        prefs.getString("user_gender", "") ?: ""
+    )
+    val gender: StateFlow<String> = _gender.asStateFlow()
+
+    fun setGender(gender: String) {
+        prefs.edit {
+            putString("user_gender", gender)
+        }
+        _gender.value = gender
+    }
+
+    private val _profession = MutableStateFlow(
+        prefs.getString("user_profession", "") ?: ""
+    )
+    val profession: StateFlow<String> = _profession.asStateFlow()
+
+    fun setProfession(profession: String) {
+        prefs.edit {
+            putString("user_profession", profession)
+        }
+        _profession.value = profession
+    }
 }
