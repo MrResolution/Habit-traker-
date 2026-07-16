@@ -82,13 +82,14 @@ fun WeeklyTrendChart(
                 .height(180.dp)
         ) {
             val surfaceColor = MaterialTheme.colorScheme.surface
+            val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val width = size.width
                 val height = size.height
-                val paddingLeft = 40f
-                val paddingRight = 40f
-                val paddingTop = 20f
-                val paddingBottom = 40f
+                val paddingLeft = 24.dp.toPx()
+                val paddingRight = 24.dp.toPx()
+                val paddingTop = 16.dp.toPx()
+                val paddingBottom = 32.dp.toPx()
 
                 val chartWidth = width - paddingLeft - paddingRight
                 val chartHeight = height - paddingTop - paddingBottom
@@ -102,7 +103,7 @@ fun WeeklyTrendChart(
                     val ratePercent = (100 - (100 / lines) * j)
                     // Draw dashed helper lines
                     drawLine(
-                        color = Color.White.copy(alpha = 0.08f),
+                        color = gridColor,
                         start = Offset(paddingLeft, y),
                         end = Offset(width - paddingRight, y),
                         strokeWidth = 2f
@@ -188,7 +189,7 @@ fun WeeklyTrendChart(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(start = 18.dp, end = 12.dp),
+                    .padding(start = 18.dp, end = 18.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 dayLabels.forEach { label ->
@@ -235,13 +236,14 @@ fun CategoryDonutChart(
                 modifier = Modifier.size(140.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val emptyColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     var startAngle = -90f
                     val strokeWidth = 32f
 
                     if (totalCount == 0) {
                         drawArc(
-                            color = Color.White.copy(alpha = 0.1f),
+                            color = emptyColor,
                             startAngle = 0f,
                             sweepAngle = 360f,
                             useCenter = false,
@@ -368,7 +370,7 @@ fun MonthlyHeatmapGrid(
 
                         // Color intensity based on habits done on that day
                         val squareColor = when {
-                            doneCount == 0 -> Color.White.copy(alpha = 0.05f)
+                            doneCount == 0 -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                             doneCount == 1 -> CyberTeal.copy(alpha = 0.4f)
                             doneCount == 2 -> NeonPurple.copy(alpha = 0.7f)
                             else -> NeonPurple // Full brilliance
@@ -399,7 +401,7 @@ fun MonthlyHeatmapGrid(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(end = 6.dp)
             )
-            Box(modifier = Modifier.size(10.dp).background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(2.dp)))
+            Box(modifier = Modifier.size(10.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(2.dp)))
             Spacer(modifier = Modifier.width(4.dp))
             Box(modifier = Modifier.size(10.dp).background(CyberTeal.copy(alpha = 0.4f), RoundedCornerShape(2.dp)))
             Spacer(modifier = Modifier.width(4.dp))
