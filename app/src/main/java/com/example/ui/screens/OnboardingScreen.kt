@@ -47,11 +47,10 @@ fun OnboardingScreen(
     onComplete: (OnboardingResult) -> Unit
 ) {
     var currentStep by remember { mutableStateOf(0) }
-    val totalSteps = if (isGoogleUser) 4 else 3 // Google users get a display name step
+    val totalSteps = if (isGoogleUser) 3 else 2 // Google users get a display name step
 
     // State
     var displayName by remember { mutableStateOf(initialDisplayName) }
-    var selectedGender by remember { mutableStateOf("") }
     var selectedProfession by remember { mutableStateOf("") }
     var selectedHabits by remember { mutableStateOf(setOf<String>()) }
     var avatarIndex by remember { mutableStateOf(1) }
@@ -122,19 +121,11 @@ fun OnboardingScreen(
                             displayName = displayName,
                             onNameChange = { displayName = it }
                         )
-                        1 -> GenderStep(
-                            selectedGender = selectedGender,
-                            onGenderSelected = { gender ->
-                                selectedGender = gender
-                                // Auto-set avatar range based on gender
-                                avatarIndex = if (gender == "Female") 5 else 1
-                            }
-                        )
-                        2 -> ProfessionStep(
+                        1 -> ProfessionStep(
                             selectedProfession = selectedProfession,
                             onProfessionSelected = { selectedProfession = it }
                         )
-                        3 -> HabitSuggestionsStep(
+                        2 -> HabitSuggestionsStep(
                             profession = selectedProfession,
                             selectedHabits = selectedHabits,
                             onToggleHabit = { habit ->
@@ -173,8 +164,7 @@ fun OnboardingScreen(
                     val isLastStep = currentStep == totalSteps - 1
                     val canProceed = when {
                         isGoogleUser && currentStep == 0 -> displayName.isNotBlank()
-                        (!isGoogleUser && currentStep == 0) || (isGoogleUser && currentStep == 1) -> selectedGender.isNotBlank()
-                        (!isGoogleUser && currentStep == 1) || (isGoogleUser && currentStep == 2) -> selectedProfession.isNotBlank()
+                        (!isGoogleUser && currentStep == 0) || (isGoogleUser && currentStep == 1) -> selectedProfession.isNotBlank()
                         else -> true
                     }
 
@@ -184,7 +174,7 @@ fun OnboardingScreen(
                                 onComplete(
                                     OnboardingResult(
                                         displayName = displayName,
-                                        gender = selectedGender,
+                                        gender = "",
                                         profession = selectedProfession,
                                         selectedHabits = selectedHabits.toList(),
                                         avatarIndex = avatarIndex
@@ -464,15 +454,12 @@ fun SelectableOptionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .then(
-                if (isSelected) Modifier.border(2.dp, NeonPurple, RoundedCornerShape(16.dp))
-                else Modifier
-            ),
+            .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) NeonPurple.copy(alpha = 0.08f) else Color.White
         ),
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, NeonPurple) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
     ) {
         Row(
@@ -525,15 +512,12 @@ fun HabitSuggestionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
-            .then(
-                if (isSelected) Modifier.border(2.dp, CyberTeal, RoundedCornerShape(16.dp))
-                else Modifier
-            ),
+            .clickable { onToggle() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) CyberTeal.copy(alpha = 0.06f) else Color.White
         ),
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, CyberTeal) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 3.dp else 1.dp)
     ) {
         Row(
