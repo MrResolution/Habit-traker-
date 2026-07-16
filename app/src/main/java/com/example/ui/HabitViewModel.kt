@@ -5,9 +5,11 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
+import com.example.data.FirestoreRepository
 import com.example.data.Habit
 import com.example.data.HabitLog
 import com.example.data.HabitRepository
+import com.example.data.LeaderboardEntry
 import com.example.data.StreakMilestone
 import com.example.data.StreakMilestoneService
 import com.example.receiver.NotificationReceiver
@@ -25,6 +27,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: HabitRepository
     private val milestoneService: StreakMilestoneService
+    private val firestoreRepository: FirestoreRepository
     val habits: StateFlow<List<Habit>>
     val logs: StateFlow<List<HabitLog>>
     val milestones: StateFlow<List<StreakMilestone>>
@@ -32,10 +35,14 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedDate = MutableStateFlow("")
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
 
+    // Leaderboard state from Firestore
+    val leaderboardEntries: StateFlow<List<LeaderboardEntry>>
+
     init {
         val database = AppDatabase.getDatabase(application)
         repository = HabitRepository(database.habitDao())
         milestoneService = StreakMilestoneService(database.streakMilestoneDao())
+        firestoreRepository = FirestoreRepository()
         
         habits = repository.allHabits.stateIn(
             scope = viewModelScope,
@@ -55,6 +62,12 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
+        leaderboardEntries = firestoreRepository.getLeaderboard().stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         _selectedDate.value = sdf.format(Calendar.getInstance().time)
 
@@ -62,11 +75,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             milestoneService.seedMilestonesIfEmpty()
             repository.allHabits.collect { list ->
-                if (list.isEmpty()) {
-                    seedInitialData()
-                } else {
-                    milestoneService.checkAndUpdateMilestones(list)
-                }
+                milestoneService.checkAndUpdateMilestones(list)
             }
         }
     }
@@ -105,6 +114,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     reminderTime
                 )
             }
+            // Sync to leaderboard after adding habit
+            syncToLeaderboard()
         }
     }
 
@@ -128,6 +139,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleHabitCompletion(habitId: Int, dateStr: String) {
         viewModelScope.launch {
             repository.toggleHabitCompletion(habitId, dateStr)
+            // Sync to leaderboard after completion toggle
+            syncToLeaderboard()
         }
     }
 
@@ -135,85 +148,54 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             NotificationReceiver.cancelNotification(context, habit.id)
             repository.deleteHabit(habit)
+            // Sync to leaderboard after deletion
+            syncToLeaderboard()
         }
     }
 
-    private suspend fun seedInitialData() {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val cal = Calendar.getInstance()
+    /**
+     * Syncs the current user's stats to the Firestore leaderboard.
+     * Called after habit completions, additions, or deletions.
+     */
+    private suspend fun syncToLeaderboard() {
+        try {
+            val currentHabits = habits.value
+            val currentLogs = logs.value
+            val currentMilestones = milestones.value
+            val totalCompletions = currentLogs.size
+            firestoreRepository.syncLeaderboard(currentHabits, totalCompletions)
+            firestoreRepository.backupUserData(currentHabits, currentLogs, currentMilestones)
+        } catch (e: Exception) {
+            // Non-critical: leaderboard sync failure shouldn't crash the app
+            android.util.Log.e("HabitViewModel", "Leaderboard sync failed", e)
+        }
+    }
 
-        val today = sdf.format(cal.time)
+    /**
+     * Manually backs up data to the cloud.
+     */
+    fun forceBackup() {
+        viewModelScope.launch {
+            val currentHabits = habits.value
+            val currentLogs = logs.value
+            val currentMilestones = milestones.value
+            firestoreRepository.backupUserData(currentHabits, currentLogs, currentMilestones)
+        }
+    }
 
-        cal.add(Calendar.DAY_OF_YEAR, -1)
-        val yesterday = sdf.format(cal.time)
-
-        cal.add(Calendar.DAY_OF_YEAR, -1)
-        val twoDaysAgo = sdf.format(cal.time)
-
-        cal.add(Calendar.DAY_OF_YEAR, -1)
-        val threeDaysAgo = sdf.format(cal.time)
-
-        cal.add(Calendar.DAY_OF_YEAR, -1)
-        val fourDaysAgo = sdf.format(cal.time)
-
-        cal.add(Calendar.DAY_OF_YEAR, -1)
-        val fiveDaysAgo = sdf.format(cal.time)
-
-        // Habit 1: Hydration
-        val h1Id = repository.insertHabit(
-            Habit(
-                name = "Drink 3L Water",
-                description = "Stay energized and clear-minded",
-                category = "Health",
-                frequency = "Daily",
-                streak = 3,
-                bestStreak = 4,
-                reminderTime = "08:00",
-                isNotificationEnabled = false,
-                lastCompletedDate = today
-            )
-        )
-        repository.toggleHabitCompletion(h1Id.toInt(), fiveDaysAgo)
-        repository.toggleHabitCompletion(h1Id.toInt(), threeDaysAgo)
-        repository.toggleHabitCompletion(h1Id.toInt(), twoDaysAgo)
-        repository.toggleHabitCompletion(h1Id.toInt(), yesterday)
-        repository.toggleHabitCompletion(h1Id.toInt(), today)
-
-        // Habit 2: Mindfulness
-        val h2Id = repository.insertHabit(
-            Habit(
-                name = "Morning Zen",
-                description = "10 minutes of deep breathing and gratitude",
-                category = "Mindfulness",
-                frequency = "Daily",
-                streak = 2,
-                bestStreak = 3,
-                reminderTime = "07:30",
-                isNotificationEnabled = false,
-                lastCompletedDate = today
-            )
-        )
-        repository.toggleHabitCompletion(h2Id.toInt(), fourDaysAgo)
-        repository.toggleHabitCompletion(h2Id.toInt(), threeDaysAgo)
-        repository.toggleHabitCompletion(h2Id.toInt(), yesterday)
-        repository.toggleHabitCompletion(h2Id.toInt(), today)
-
-        // Habit 3: Coding
-        val h3Id = repository.insertHabit(
-            Habit(
-                name = "Code 1 Hour",
-                description = "Build personal projects and learn new libraries",
-                category = "Productivity",
-                frequency = "Daily",
-                streak = 1,
-                bestStreak = 2,
-                reminderTime = "20:00",
-                isNotificationEnabled = false,
-                lastCompletedDate = today
-            )
-        )
-        repository.toggleHabitCompletion(h3Id.toInt(), fiveDaysAgo)
-        repository.toggleHabitCompletion(h3Id.toInt(), fourDaysAgo)
-        repository.toggleHabitCompletion(h3Id.toInt(), today)
+    /**
+     * Restores user state from the cloud backup and overwrites local data.
+     */
+    fun restoreFromCloud(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val backup = firestoreRepository.restoreUserData()
+            if (backup != null) {
+                repository.restoreData(backup.habits, backup.logs)
+                milestoneService.restoreData(backup.milestones)
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
     }
 }

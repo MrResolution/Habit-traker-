@@ -26,6 +26,13 @@ class HabitRepository(private val habitDao: HabitDao) {
         habitDao.deleteHabit(habit)
     }
 
+    suspend fun restoreData(habits: List<Habit>, logs: List<HabitLog>) {
+        habitDao.clearAllLogs()
+        habitDao.clearAllHabits()
+        habitDao.insertHabits(habits)
+        habitDao.insertLogs(logs)
+    }
+
     suspend fun toggleHabitCompletion(habitId: Int, dateStr: String): Boolean {
         // Fetch habit
         val habit = habitDao.getHabitByIdSuspend(habitId) ?: return false

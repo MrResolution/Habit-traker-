@@ -11,10 +11,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "streak_milestones")
 data class StreakMilestone(
-    @PrimaryKey val milestoneId: String, // e.g. "starter_3", "warrior_7", "champion_14", "legend_30"
-    val name: String,
-    val description: String,
-    val targetStreak: Int,
+    @PrimaryKey val milestoneId: String = "", // e.g. "starter_3", "warrior_7", "champion_14", "legend_30"
+    val name: String = "",
+    val description: String = "",
+    val targetStreak: Int = 0,
     val isAchieved: Boolean = false,
     val achievedDate: String? = null
 )
@@ -32,4 +32,7 @@ interface StreakMilestoneDao {
 
     @Update
     suspend fun updateMilestone(milestone: StreakMilestone)
+
+    @Query("DELETE FROM streak_milestones")
+    suspend fun clearAllMilestones()
 }

@@ -243,7 +243,20 @@ fun MainDashboard(
                         viewModel.updateHabit(habit.copy(isNotificationEnabled = enabled), context)
                     },
                     onDelete = { habit -> viewModel.deleteHabit(habit, context) },
-                    themePreferences = themePreferences
+                    themePreferences = themePreferences,
+                    onBackup = {
+                        viewModel.forceBackup()
+                        android.widget.Toast.makeText(context, "Backup initiated", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    onRestore = {
+                        viewModel.restoreFromCloud { success ->
+                            if (success) {
+                                android.widget.Toast.makeText(context, "Restored successfully", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                android.widget.Toast.makeText(context, "No backup found", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                 )
             }
 
@@ -942,7 +955,9 @@ fun ManageTab(
     habits: List<Habit>,
     onToggleNotification: (Habit, Boolean) -> Unit,
     onDelete: (Habit) -> Unit,
-    themePreferences: ThemePreferences
+    themePreferences: ThemePreferences,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -989,6 +1004,49 @@ fun ManageTab(
                                 color = if (isSelected) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(8.dp))
+            Column {
+                Text(
+                    text = "Cloud Sync",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Backup and restore your data across devices.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = onBackup,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = "Backup", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Backup")
+                    }
+                    Button(
+                        onClick = onRestore,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberTeal)
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = "Restore", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Restore")
                     }
                 }
             }

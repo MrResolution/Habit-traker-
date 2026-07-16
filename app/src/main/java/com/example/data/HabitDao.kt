@@ -50,4 +50,16 @@ interface HabitDao {
 
     @Query("DELETE FROM habit_logs WHERE habitId = :habitId AND date = :date")
     suspend fun deleteLog(habitId: Int, date: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabits(habits: List<Habit>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLogs(logs: List<HabitLog>)
+
+    @Query("DELETE FROM habits")
+    suspend fun clearAllHabits()
+
+    @Query("DELETE FROM habit_logs")
+    suspend fun clearAllLogs()
 }

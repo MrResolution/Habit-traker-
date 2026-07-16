@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "habits")
 data class Habit(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val name: String,
+    val name: String = "",
     val description: String = "",
     val category: String = "General", // "Health", "Fitness", "Mindfulness", "Productivity", "General"
     val frequency: String = "Daily", // "Daily", "Weekly"
@@ -22,8 +22,8 @@ data class Habit(
 @Entity(tableName = "habit_logs")
 data class HabitLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val habitId: Int,
-    val date: String, // "yyyy-MM-dd"
+    val habitId: Int = 0,
+    val date: String = "", // "yyyy-MM-dd"
     val isCompleted: Boolean = true,
     val timestamp: Long = System.currentTimeMillis()
 )

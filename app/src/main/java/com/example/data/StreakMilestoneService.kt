@@ -10,6 +10,14 @@ class StreakMilestoneService(private val dao: StreakMilestoneDao) {
     val allMilestones: Flow<List<StreakMilestone>> = dao.getAllMilestones()
 
     /**
+     * Restores milestones from backup.
+     */
+    suspend fun restoreData(milestones: List<StreakMilestone>) {
+        dao.clearAllMilestones()
+        dao.insertMilestones(milestones)
+    }
+
+    /**
      * Seeds initial milestones if they do not exist.
      */
     suspend fun seedMilestonesIfEmpty() {
