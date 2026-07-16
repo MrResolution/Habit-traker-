@@ -15,6 +15,9 @@ import com.example.ui.theme.MyApplicationTheme
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,7 +76,21 @@ class MainActivity : ComponentActivity() {
                         is AuthState.Authenticated -> {
                             val user = (authState as AuthState.Authenticated).user
                             
-                            if (!isOnboardingComplete) {
+                            var checkingOnboarding by remember { mutableStateOf(!isOnboardingComplete) }
+
+                            LaunchedEffect(user.uid) {
+                                if (!isOnboardingComplete) {
+                                    val isCompleteInCloud = authViewModel.checkIsOnboardingComplete()
+                                    if (isCompleteInCloud) {
+                                        themePreferences.setOnboardingComplete(true)
+                                    }
+                                }
+                                checkingOnboarding = false
+                            }
+
+                            if (checkingOnboarding) {
+                                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                            } else if (!isOnboardingComplete) {
                                 val isGoogleUser = user.providerData.any { it.providerId == "google.com" }
                                 OnboardingScreen(
                                     initialDisplayName = user.displayName ?: "",
@@ -100,8 +117,17 @@ class MainActivity : ComponentActivity() {
                                         
                                         // Mark onboarding done
                                         themePreferences.setOnboardingComplete(true)
+                                        
+                                        // Launch a coroutine using a side effect to update the cloud
                                     }
                                 )
+                                
+                                // Side effect to update cloud when onboarding completes
+                                LaunchedEffect(isOnboardingComplete) {
+                                    if (isOnboardingComplete) {
+                                        authViewModel.markOnboardingComplete()
+                                    }
+                                }
                             } else {
                                 MainDashboard(
                                     viewModel = habitViewModel,

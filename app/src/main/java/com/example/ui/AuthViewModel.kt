@@ -241,4 +241,23 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getCurrentUserId(): String? = auth.currentUser?.uid
+
+    suspend fun checkIsOnboardingComplete(): Boolean {
+        val uid = auth.currentUser?.uid ?: return false
+        return try {
+            val doc = db.collection("users").document(uid).get().await()
+            doc.getBoolean("onboardingComplete") ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun markOnboardingComplete() {
+        val uid = auth.currentUser?.uid ?: return
+        try {
+            db.collection("users").document(uid).update("onboardingComplete", true).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update onboarding status", e)
+        }
+    }
 }
