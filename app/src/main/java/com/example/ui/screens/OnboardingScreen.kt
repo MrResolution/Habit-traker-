@@ -449,56 +449,56 @@ fun SelectableOptionCard(
     label: String,
     icon: ImageVector,
     isSelected: Boolean,
+@Composable
+fun SelectableOptionCard(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) NeonPurple.copy(alpha = 0.08f) else Color.White
-        ),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, NeonPurple) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 0.dp else 1.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(if (isSelected) NeonPurple.copy(alpha = 0.15f) else Color(0xFFF3F4F6)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isSelected) NeonPurple else Color(0xFF6B7280),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) NeonPurple else Color(0xFF1F2937)
+            .background(if (isSelected) NeonPurple.copy(alpha = 0.08f) else Color.White)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) NeonPurple else Color(0xFFF3F4F6),
+                shape = RoundedCornerShape(16.dp)
             )
-            Spacer(modifier = Modifier.weight(1f))
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Selected",
-                    tint = NeonPurple,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            .clickable { onClick() }
+            .padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) NeonPurple.copy(alpha = 0.15f) else Color(0xFFF3F4F6)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) NeonPurple else Color(0xFF6B7280),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) NeonPurple else Color(0xFF1F2937)
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = "Selected",
+                tint = NeonPurple,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }
@@ -510,46 +510,41 @@ fun HabitSuggestionCard(
     isSelected: Boolean,
     onToggle: () -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable { onToggle() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) CyberTeal.copy(alpha = 0.06f) else Color.White
-        ),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, CyberTeal) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 0.dp else 1.dp)
+            .background(if (isSelected) CyberTeal.copy(alpha = 0.06f) else Color.White)
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) CyberTeal else Color(0xFFF3F4F6),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable { onToggle() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = habitName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isSelected) Color(0xFF0F766E) else Color(0xFF1F2937)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF9CA3AF)
-                )
-            }
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = { onToggle() },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = CyberTeal,
-                    uncheckedColor = Color(0xFFD1D5DB)
-                )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = habitName,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isSelected) Color(0xFF0F766E) else Color(0xFF1F2937)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF9CA3AF)
             )
         }
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = { onToggle() },
+            colors = CheckboxDefaults.colors(
+                checkedColor = CyberTeal,
+                uncheckedColor = Color(0xFFD1D5DB)
+            )
+        )
     }
 }
