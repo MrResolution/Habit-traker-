@@ -50,12 +50,13 @@ fun AuthScreen(viewModel: AuthViewModel, isRegistration: Boolean) {
     val error by viewModel.loginError.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0F0F1A)) // Deep dark space color to match the image
-    ) {
-        // Hero Image Background (Top Half)
+    MaterialTheme(colorScheme = lightColorScheme()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF3F4F6)) // Light gray background
+        ) {
+            // Hero Image Background (Top Half)
         Image(
             painter = painterResource(id = com.example.R.drawable.login_hero),
             contentDescription = "Welcome Avatar",
