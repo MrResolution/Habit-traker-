@@ -5,6 +5,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import android.app.Activity
 
 // Defining temporary light theme values to avoid compile errors
 private val ColorLightBorder = androidx.compose.ui.graphics.Color(0xFFE5E7EB)
@@ -48,7 +53,19 @@ fun MyApplicationTheme(
 ) {
     // Force dark theme as requested for clean UI with dark mode support by default,
     // but keep system dark theme fallback capability
-    val colorScheme = if (darkTheme) DarkColorScheme else DarkColorScheme // Force dark theme by default to ensure premium aesthetic
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = androidx.compose.ui.graphics.Color.Transparent.toArgb()
+            window.navigationBarColor = androidx.compose.ui.graphics.Color.Transparent.toArgb()
+            
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,

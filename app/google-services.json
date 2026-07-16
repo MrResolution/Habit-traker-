@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "488253985748-rdpq0jnei045h13k39j49fl0ld1lmuqe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.habittracker.uqmznx",
+            "certificate_hash": "6bdede01040b7d61f40f5d699c9ace94aedd7966"
+          }
+        },
+        {
           "client_id": "488253985748-3bb2kt7qf7kcsgg3qhq8bjgj92tdej41.apps.googleusercontent.com",
           "client_type": 3
         }
