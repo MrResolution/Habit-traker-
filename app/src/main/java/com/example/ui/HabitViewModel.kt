@@ -28,6 +28,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: HabitRepository
     private val milestoneService: StreakMilestoneService
     private val firestoreRepository: FirestoreRepository
+    private val themePreferences: com.example.data.ThemePreferences
     val habits: StateFlow<List<Habit>>
     val logs: StateFlow<List<HabitLog>>
     val milestones: StateFlow<List<StreakMilestone>>
@@ -43,6 +44,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         repository = HabitRepository(database.habitDao())
         milestoneService = StreakMilestoneService(database.streakMilestoneDao())
         firestoreRepository = FirestoreRepository()
+        themePreferences = com.example.data.ThemePreferences(application)
         
         habits = repository.allHabits.stateIn(
             scope = viewModelScope,
@@ -164,7 +166,10 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             val currentMilestones = milestones.value
             val totalCompletions = currentLogs.size
             firestoreRepository.syncLeaderboard(currentHabits, totalCompletions)
-            firestoreRepository.backupUserData(currentHabits, currentLogs, currentMilestones)
+            
+            if (themePreferences.isAutoBackupEnabled.value) {
+                firestoreRepository.backupUserData(currentHabits, currentLogs, currentMilestones)
+            }
         } catch (e: Exception) {
             // Non-critical: leaderboard sync failure shouldn't crash the app
             android.util.Log.e("HabitViewModel", "Leaderboard sync failed", e)

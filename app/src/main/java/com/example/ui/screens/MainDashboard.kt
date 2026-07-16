@@ -1049,6 +1049,31 @@ fun ManageTab(
                         Text("Restore")
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
+                val autoBackupEnabled by themePreferences.isAutoBackupEnabled.collectAsState()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Auto-Backup",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Backup to cloud when habits change",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoBackupEnabled,
+                        onCheckedChange = { themePreferences.setAutoBackupEnabled(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = CyberTeal, checkedTrackColor = CyberTeal.copy(alpha = 0.5f))
+                    )
+                }
             }
         }
 
