@@ -111,7 +111,7 @@ class NotificationReceiver : BroadcastReceiver() {
         remoteViews.setTextViewText(R.id.notification_desc, habitDesc)
 
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(remoteViews)
             .setColor(android.graphics.Color.parseColor("#9D4EDD")) // Custom Color (Neon Purple)
