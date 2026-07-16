@@ -54,226 +54,226 @@ fun AuthScreen(viewModel: AuthViewModel, isRegistration: Boolean) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF3F4F6)) // Light gray background
+                .background(Color(0xFFF3F4F6))
         ) {
             // Hero Image Background (Top Half)
-        Image(
-            painter = painterResource(id = com.example.R.drawable.login_hero),
-            contentDescription = "Welcome Avatar",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.55f)
-                .align(Alignment.TopCenter)
-        )
-
-        // Bottom Sheet Card
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.65f), // Slightly overlaps the image for depth
-            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 16.dp
-        ) {
-            Column(
+            Image(
+                painter = painterResource(id = com.example.R.drawable.login_hero),
+                contentDescription = "Welcome Avatar",
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.55f)
+                    .align(Alignment.TopCenter)
+            )
+
+            // Bottom Sheet Card
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .fillMaxHeight(0.65f),
+                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 16.dp
             ) {
-                Text(
-                    text = if (isRegistration) "Join the Journey" else "Welcome Back",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = if (isRegistration) "Join the Journey" else "Welcome Back",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = if (isRegistration)
-                        "Create an account to start tracking habits and building streaks."
-                    else
-                        "Log in to sync your progress and continue crushing your goals.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                    Text(
+                        text = if (isRegistration)
+                            "Create an account to start tracking habits and building streaks."
+                        else
+                            "Log in to sync your progress and continue crushing your goals.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                // Display Name field (registration only)
-                if (isRegistration) {
+                    // Display Name field (registration only)
+                    if (isRegistration) {
+                        CustomTextField(
+                            value = displayName,
+                            onValueChange = { displayName = it; viewModel.clearError() },
+                            placeholder = "Display Name",
+                            leadingIcon = Icons.Default.Person,
+                            enabled = !isLoading
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Email field
                     CustomTextField(
-                        value = displayName,
-                        onValueChange = { displayName = it; viewModel.clearError() },
-                        placeholder = "Display Name",
-                        leadingIcon = Icons.Default.Person,
+                        value = email,
+                        onValueChange = { email = it; viewModel.clearError() },
+                        placeholder = "Email Address",
+                        leadingIcon = Icons.Default.Email,
                         enabled = !isLoading
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                }
 
-                // Email field
-                CustomTextField(
-                    value = email,
-                    onValueChange = { email = it; viewModel.clearError() },
-                    placeholder = "Email Address",
-                    leadingIcon = Icons.Default.Email,
-                    enabled = !isLoading
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Password field
-                CustomTextField(
-                    value = password,
-                    onValueChange = { password = it; viewModel.clearError() },
-                    placeholder = "Password",
-                    leadingIcon = Icons.Default.Lock,
-                    isPassword = true,
-                    passwordVisible = passwordVisible,
-                    onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
-                    enabled = !isLoading
-                )
-
-                if (isRegistration) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    // Confirm Password field
+                    // Password field
                     CustomTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it; viewModel.clearError() },
-                        placeholder = "Confirm Password",
+                        value = password,
+                        onValueChange = { password = it; viewModel.clearError() },
+                        placeholder = "Password",
                         leadingIcon = Icons.Default.Lock,
                         isPassword = true,
-                        passwordVisible = confirmPasswordVisible,
-                        onPasswordVisibilityToggle = { confirmPasswordVisible = !confirmPasswordVisible },
+                        passwordVisible = passwordVisible,
+                        onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
                         enabled = !isLoading
                     )
-                } else {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        Text(
-                            text = "Forgot Password?",
-                            fontSize = 13.sp,
-                            color = NeonPurple,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.clickable { /* Handle forgot password */ }
-                        )
-                    }
-                }
 
-                // Error message
-                if (error != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = error ?: "",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Main action button
-                Button(
-                    onClick = {
-                        if (isRegistration) {
-                            if (password == confirmPassword) {
-                                viewModel.register(displayName, email, password)
-                            }
-                        } else {
-                            viewModel.login(email, password)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    enabled = !isLoading,
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
+                    if (isRegistration) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        // Confirm Password field
+                        CustomTextField(
+                            value = confirmPassword,
+                            onValueChange = { confirmPassword = it; viewModel.clearError() },
+                            placeholder = "Confirm Password",
+                            leadingIcon = Icons.Default.Lock,
+                            isPassword = true,
+                            passwordVisible = confirmPasswordVisible,
+                            onPasswordVisibilityToggle = { confirmPasswordVisible = !confirmPasswordVisible },
+                            enabled = !isLoading
                         )
                     } else {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Text(
+                                text = "Forgot Password?",
+                                fontSize = 13.sp,
+                                color = NeonPurple,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clickable { /* Handle forgot password */ }
+                            )
+                        }
+                    }
+
+                    // Error message
+                    if (error != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (isRegistration) "Create Account" else "Log In",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            text = error ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
                         )
                     }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                // Divider with "Or Continue With"
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    Text(
-                        text = "  Or Continue With  ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Social Buttons
-                GoogleSocialButton(onClick = {
-                    if (activity != null) {
-                        viewModel.signInWithGoogle(activity)
-                    }
-                })
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Toggle between login and registration
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (isRegistration) "Already have an account? " else "Don't have an account? ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = if (isRegistration) "Sign In" else "Sign Up",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = CyberTeal,
-                        modifier = Modifier.clickable {
+                    // Main action button
+                    Button(
+                        onClick = {
                             if (isRegistration) {
-                                viewModel.switchToLogin()
+                                if (password == confirmPassword) {
+                                    viewModel.register(displayName, email, password)
+                                }
                             } else {
-                                viewModel.switchToRegister()
+                                viewModel.login(email, password)
                             }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = if (isRegistration) "Create Account" else "Log In",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
                         }
-                    )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Divider with "Or Continue With"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        Text(
+                            text = "  Or Continue With  ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Social Buttons
+                    GoogleSocialButton(onClick = {
+                        if (activity != null) {
+                            viewModel.signInWithGoogle(activity)
+                        }
+                    })
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Toggle between login and registration
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isRegistration) "Already have an account? " else "Don't have an account? ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (isRegistration) "Sign In" else "Sign Up",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberTeal,
+                            modifier = Modifier.clickable {
+                                if (isRegistration) {
+                                    viewModel.switchToLogin()
+                                } else {
+                                    viewModel.switchToRegister()
+                                }
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
-                
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomTextField(
