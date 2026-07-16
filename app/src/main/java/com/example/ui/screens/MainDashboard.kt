@@ -1366,7 +1366,7 @@ fun AddHabitDialog(
                         ) {
                             OutlinedTextField(
                                 value = currentReminderHour,
-                                onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 1..12)) currentReminderHour = it },
+                                onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..12)) currentReminderHour = it },
                                 label = { Text("Hour") },
                                 modifier = Modifier.width(72.dp).testTag("input_reminder_hour"),
                                 keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
@@ -1406,7 +1406,8 @@ fun AddHabitDialog(
                             IconButton(
                                 onClick = { 
                                     if (currentReminderHour.isNotEmpty() && currentReminderMinute.isNotEmpty()) {
-                                        val hInt = currentReminderHour.toIntOrNull() ?: 8
+                                        var hInt = currentReminderHour.toIntOrNull() ?: 8
+                                        if (hInt == 0) hInt = 12
                                         var h24 = hInt
                                         if (currentAmPm == "AM" && h24 == 12) h24 = 0
                                         if (currentAmPm == "PM" && h24 < 12) h24 += 12
@@ -1431,7 +1432,8 @@ fun AddHabitDialog(
                 onClick = {
                     if (name.isNotEmpty()) {
                         val finalTimes = if (reminderTimes.isEmpty()) {
-                            val hInt = currentReminderHour.toIntOrNull() ?: 8
+                            var hInt = currentReminderHour.toIntOrNull() ?: 8
+                            if (hInt == 0) hInt = 12
                             var h24 = hInt
                             if (currentAmPm == "AM" && h24 == 12) h24 = 0
                             if (currentAmPm == "PM" && h24 < 12) h24 += 12
