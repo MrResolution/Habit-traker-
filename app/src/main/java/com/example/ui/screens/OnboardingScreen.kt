@@ -90,8 +90,12 @@ fun OnboardingScreen(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = progressFraction,
+                        animationSpec = tween(500)
+                    )
                     LinearProgressIndicator(
-                        progress = { animateFloatAsState(targetValue = progressFraction, animationSpec = tween(500)).value },
+                        progress = { animatedProgress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp)
