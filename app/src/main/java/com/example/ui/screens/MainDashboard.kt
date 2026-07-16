@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,6 +37,9 @@ import com.example.data.Habit
 import com.example.data.HabitLog
 import com.example.data.StreakMilestone
 import com.example.ui.HabitViewModel
+import com.example.data.LeaderboardEntry
+import com.example.data.ThemeMode
+import com.example.data.ThemePreferences
 import com.example.ui.components.CategoryDonutChart
 import com.example.ui.components.MonthlyHeatmapGrid
 import com.example.ui.components.WeeklyTrendChart
@@ -49,16 +54,20 @@ import java.util.*
 fun MainDashboard(
     viewModel: HabitViewModel,
     modifier: Modifier = Modifier,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    userName: String = "User",
+    themePreferences: ThemePreferences
 ) {
     val context = LocalContext.current
     val habits by viewModel.habits.collectAsState()
     val logs by viewModel.logs.collectAsState()
     val milestones by viewModel.milestones.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
+    val leaderboardEntries by viewModel.leaderboardEntries.collectAsState()
 
-    var activeTab by remember { mutableStateOf("today") } // "today", "charts", "manage"
+    var activeTab by remember { mutableStateOf("today") } // "today", "charts", "leaderboard", "manage"
     var showAddHabitDialog by remember { mutableStateOf(false) }
+    var showProfileSheet by remember { mutableStateOf(false) }
 
     // Check & Ask Notification Permission
     var hasNotificationPermission by remember {
@@ -91,28 +100,59 @@ fun MainDashboard(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Habit Tracker",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val avatarIndex by themePreferences.selectedAvatarIndex.collectAsState()
+                        val avatarRes = when (avatarIndex) {
+                            1 -> com.example.R.drawable.av1
+                            2 -> com.example.R.drawable.av2
+                            3 -> com.example.R.drawable.av3
+                            4 -> com.example.R.drawable.av4
+                            5 -> com.example.R.drawable.av5
+                            6 -> com.example.R.drawable.av6
+                            7 -> com.example.R.drawable.av7
+                            8 -> com.example.R.drawable.av8
+                            9 -> com.example.R.drawable.av9
+                            else -> com.example.R.drawable.av1
+                        }
+
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(id = avatarRes),
+                            contentDescription = "User Avatar",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .clickable { showProfileSheet = true },
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
                         )
-                        Text(
-                            text = "Build Consistency • Elevate Your Life",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        Column {
+                            Text(
+                                text = "Hi, $userName",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.LocalFireDepartment,
+                                    contentDescription = "Streak",
+                                    tint = StreakRose,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                val totalStreak = habits.sumOf { it.streak }
+                                Text(
+                                    text = "$totalStreak Day Streak",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = onLogout) {
-                        Icon(
-                            imageVector = Icons.Default.Logout,
-                            contentDescription = "Logout",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     if (activeTab == "today") {
                         IconButton(
                             onClick = { showAddHabitDialog = true },
@@ -127,7 +167,8 @@ fun MainDashboard(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                    scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent
                 )
             )
         },
@@ -149,6 +190,13 @@ fun MainDashboard(
                     icon = { Icon(Icons.Default.BarChart, contentDescription = "Charts") },
                     label = { Text("Insights") },
                     modifier = Modifier.testTag("tab_charts")
+                )
+                NavigationBarItem(
+                    selected = activeTab == "leaderboard",
+                    onClick = { activeTab = "leaderboard" },
+                    icon = { Icon(Icons.Default.EmojiEvents, contentDescription = "Leaderboard") },
+                    label = { Text("Board") },
+                    modifier = Modifier.testTag("tab_leaderboard")
                 )
                 NavigationBarItem(
                     selected = activeTab == "manage",
@@ -186,12 +234,16 @@ fun MainDashboard(
                     logs = logs,
                     milestones = milestones
                 )
+                "leaderboard" -> LeaderboardTab(
+                    leaderboardEntries = leaderboardEntries
+                )
                 "manage" -> ManageTab(
                     habits = habits,
                     onToggleNotification = { habit, enabled ->
                         viewModel.updateHabit(habit.copy(isNotificationEnabled = enabled), context)
                     },
-                    onDelete = { habit -> viewModel.deleteHabit(habit, context) }
+                    onDelete = { habit -> viewModel.deleteHabit(habit, context) },
+                    themePreferences = themePreferences
                 )
             }
 
@@ -203,6 +255,21 @@ fun MainDashboard(
                         showAddHabitDialog = false
                     }
                 )
+            }
+
+            if (showProfileSheet) {
+                ModalBottomSheet(
+                    onDismissRequest = { showProfileSheet = false }
+                ) {
+                    ProfileMenuSheetContent(
+                        themePreferences = themePreferences,
+                        onLogout = {
+                            showProfileSheet = false
+                            onLogout()
+                        },
+                        onDismiss = { showProfileSheet = false }
+                    )
+                }
             }
         }
     }
@@ -316,7 +383,7 @@ fun HeaderSection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Welcome Back!",
+                    text = "Daily Progress",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -336,7 +403,7 @@ fun HeaderSection(
                 // Interactive motivational quote
                 Box(
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -360,7 +427,7 @@ fun HeaderSection(
                     modifier = Modifier.fillMaxSize(),
                     color = NeonPurple,
                     strokeWidth = 8.dp,
-                    trackColor = Color.White.copy(alpha = 0.08f)
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -495,7 +562,7 @@ fun HabitItemCard(
                     .size(28.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isCompleted) NeonPurple else Color.White.copy(alpha = 0.08f)
+                        if (isCompleted) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                     )
                     .clickable { onToggle() }
                     .testTag("habit_checkbox_${habit.id}"),
@@ -543,7 +610,7 @@ fun HabitItemCard(
                                     "Health" -> CyberTeal.copy(alpha = 0.15f)
                                     "Fitness" -> StreakRose.copy(alpha = 0.15f)
                                     "Mindfulness" -> NeonPurple.copy(alpha = 0.15f)
-                                    else -> Color.White.copy(alpha = 0.08f)
+                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                 },
                                 shape = RoundedCornerShape(6.dp)
                             )
@@ -565,7 +632,7 @@ fun HabitItemCard(
                     // Frequency Tag
                     Box(
                         modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
@@ -594,7 +661,7 @@ fun HabitItemCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                     .padding(8.dp)
             ) {
                 Icon(
@@ -785,7 +852,7 @@ fun MilestoneItemCard(milestone: StreakMilestone, currentBestStreak: Int) {
                         if (isAchieved) {
                             Brush.linearGradient(listOf(NeonPurple, CyberTeal))
                         } else {
-                            Brush.linearGradient(listOf(Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.1f)))
+                            Brush.linearGradient(listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)))
                         }
                     ),
                 contentAlignment = Alignment.Center
@@ -855,7 +922,7 @@ fun MilestoneItemCard(milestone: StreakMilestone, currentBestStreak: Int) {
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp)),
                         color = NeonPurple,
-                        trackColor = Color.White.copy(alpha = 0.05f)
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                     )
                 } else if (!milestone.achievedDate.isNullOrEmpty()) {
                     Text(
@@ -874,7 +941,8 @@ fun MilestoneItemCard(milestone: StreakMilestone, currentBestStreak: Int) {
 fun ManageTab(
     habits: List<Habit>,
     onToggleNotification: (Habit, Boolean) -> Unit,
-    onDelete: (Habit) -> Unit
+    onDelete: (Habit) -> Unit,
+    themePreferences: ThemePreferences
 ) {
     LazyColumn(
         modifier = Modifier
@@ -883,6 +951,53 @@ fun ManageTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
+            Column {
+                Text(
+                    text = "App Appearance",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Customize your visual experience.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                val currentTheme by themePreferences.themeMode.collectAsState()
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeMode.values().forEach { mode ->
+                        val isSelected = currentTheme == mode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isSelected) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                )
+                                .clickable { themePreferences.setThemeMode(mode) }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = mode.name.lowercase().replaceFirstChar { it.uppercase() },
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(8.dp))
             Column {
                 Text(
                     text = "Habit Settings",
@@ -952,7 +1067,7 @@ fun ManageTab(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Divider(color = Color.White.copy(alpha = 0.05f))
+                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
 
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -976,8 +1091,15 @@ fun ManageTab(
                                         fontSize = 14.sp
                                     )
                                     if (habit.reminderTime != null) {
+                                        val parseFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                        val displayFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+                                        val formattedTimes = habit.reminderTime.split(",").map { t ->
+                                            try {
+                                                parseFormat.parse(t)?.let { displayFormat.format(it) } ?: t
+                                            } catch (e: Exception) { t }
+                                        }.joinToString(", ")
                                         Text(
-                                            text = "Set for ${habit.reminderTime}",
+                                            text = "Set for $formattedTimes",
                                             fontSize = 12.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1013,8 +1135,10 @@ fun AddHabitDialog(
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("Health") }
     var frequency by remember { mutableStateOf("Daily") }
-    var reminderHour by remember { mutableStateOf("08") }
-    var reminderMinute by remember { mutableStateOf("00") }
+    var reminderTimes by remember { mutableStateOf(listOf<String>()) }
+    var currentReminderHour by remember { mutableStateOf("08") }
+    var currentReminderMinute by remember { mutableStateOf("00") }
+    var currentAmPm by remember { mutableStateOf("AM") }
     var isNotificationEnabled by remember { mutableStateOf(false) }
 
     val categories = listOf("Health", "Fitness", "Mindfulness", "Productivity", "Custom")
@@ -1025,7 +1149,9 @@ fun AddHabitDialog(
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
             ) {
                 OutlinedTextField(
                     value = name,
@@ -1066,7 +1192,7 @@ fun AddHabitDialog(
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(
-                                        if (isSelected) NeonPurple else Color.White.copy(alpha = 0.05f)
+                                        if (isSelected) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                                     )
                                     .clickable { category = cat }
                                     .padding(vertical = 8.dp),
@@ -1093,7 +1219,7 @@ fun AddHabitDialog(
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(
-                                        if (isSelected) NeonPurple else Color.White.copy(alpha = 0.05f)
+                                        if (isSelected) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                                     )
                                     .clickable { category = cat }
                                     .padding(vertical = 8.dp),
@@ -1128,24 +1254,91 @@ fun AddHabitDialog(
                 }
 
                 if (isNotificationEnabled) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedTextField(
-                            value = reminderHour,
-                            onValueChange = { if (it.length <= 2 && it.toIntOrNull() in 0..23) reminderHour = it },
-                            label = { Text("Hour") },
-                            modifier = Modifier.width(72.dp).testTag("input_reminder_hour")
-                        )
-                        Text(" : ", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 8.dp))
-                        OutlinedTextField(
-                            value = reminderMinute,
-                            onValueChange = { if (it.length <= 2 && it.toIntOrNull() in 0..59) reminderMinute = it },
-                            label = { Text("Min") },
-                            modifier = Modifier.width(72.dp).testTag("input_reminder_minute")
-                        )
+                        val parseFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                        val displayFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+                        reminderTimes.forEach { time ->
+                            val displayTime = try {
+                                parseFormat.parse(time)?.let { displayFormat.format(it) } ?: time
+                            } catch(e: Exception) { time }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(displayTime)
+                                IconButton(onClick = { reminderTimes = reminderTimes.filter { it != time } }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Remove")
+                                }
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = currentReminderHour,
+                                onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 1..12)) currentReminderHour = it },
+                                label = { Text("Hour") },
+                                modifier = Modifier.width(72.dp).testTag("input_reminder_hour"),
+                                keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                            )
+                            Text(" : ", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                            OutlinedTextField(
+                                value = currentReminderMinute,
+                                onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..59)) currentReminderMinute = it },
+                                label = { Text("Min") },
+                                modifier = Modifier.width(72.dp).testTag("input_reminder_minute"),
+                                keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clickable { currentAmPm = "AM" }
+                                        .background(if (currentAmPm == "AM") NeonPurple else Color.Transparent)
+                                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                                ) {
+                                    Text("AM", color = if (currentAmPm == "AM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clickable { currentAmPm = "PM" }
+                                        .background(if (currentAmPm == "PM") NeonPurple else Color.Transparent)
+                                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                                ) {
+                                    Text("PM", color = if (currentAmPm == "PM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { 
+                                    if (currentReminderHour.isNotEmpty() && currentReminderMinute.isNotEmpty()) {
+                                        val hInt = currentReminderHour.toIntOrNull() ?: 8
+                                        var h24 = hInt
+                                        if (currentAmPm == "AM" && h24 == 12) h24 = 0
+                                        if (currentAmPm == "PM" && h24 < 12) h24 += 12
+                                        val h = h24.toString().padStart(2, '0')
+                                        val m = currentReminderMinute.padStart(2, '0')
+                                        val formattedTime = "$h:$m"
+                                        if (formattedTime !in reminderTimes) {
+                                            reminderTimes = reminderTimes + formattedTime
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Time", tint = NeonPurple)
+                            }
+                        }
                     }
                 }
             }
@@ -1154,8 +1347,19 @@ fun AddHabitDialog(
             Button(
                 onClick = {
                     if (name.isNotEmpty()) {
-                        val reminderTime = if (isNotificationEnabled) "$reminderHour:$reminderMinute" else null
-                        onConfirm(name, description, category, frequency, 1, reminderTime, isNotificationEnabled)
+                        val finalTimes = if (reminderTimes.isEmpty()) {
+                            val hInt = currentReminderHour.toIntOrNull() ?: 8
+                            var h24 = hInt
+                            if (currentAmPm == "AM" && h24 == 12) h24 = 0
+                            if (currentAmPm == "PM" && h24 < 12) h24 += 12
+                            val h = h24.toString().padStart(2, '0')
+                            val m = currentReminderMinute.padStart(2, '0')
+                            listOf("$h:$m")
+                        } else {
+                            reminderTimes
+                        }
+                        val reminderTimeStr = if (isNotificationEnabled) finalTimes.joinToString(",") else null
+                        onConfirm(name, description, category, frequency, 1, reminderTimeStr, isNotificationEnabled)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
@@ -1173,4 +1377,90 @@ fun AddHabitDialog(
             }
         }
     )
+}
+
+@Composable
+fun ProfileMenuSheetContent(
+    themePreferences: ThemePreferences,
+    onLogout: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Profile Menu",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Text(
+            text = "Select your avatar",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        val currentAvatarIndex by themePreferences.selectedAvatarIndex.collectAsState()
+        val avatars = listOf(
+            com.example.R.drawable.av1, com.example.R.drawable.av2, com.example.R.drawable.av3,
+            com.example.R.drawable.av4, com.example.R.drawable.av5, com.example.R.drawable.av6,
+            com.example.R.drawable.av7, com.example.R.drawable.av8, com.example.R.drawable.av9
+        )
+        
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            for (row in 0..2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    for (col in 0..2) {
+                        val index = row * 3 + col + 1
+                        val resId = avatars[index - 1]
+                        val isSelected = currentAvatarIndex == index
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) NeonPurple else Color.Transparent)
+                                .padding(if (isSelected) 4.dp else 0.dp)
+                                .clickable { themePreferences.setAvatarIndex(index) }
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(id = resId),
+                                contentDescription = "Avatar $index",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        Button(
+            onClick = onLogout,
+            colors = ButtonDefaults.buttonColors(containerColor = StreakRose),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .testTag("logout_button")
+        ) {
+            Icon(Icons.Default.Logout, contentDescription = "Logout")
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Log Out", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+    }
 }
