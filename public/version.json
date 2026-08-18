@@ -2,6 +2,6 @@
   "versionCode": 2,
   "versionName": "1.1.0",
   "releaseNotes": "• New UI improvements\n• Bug fixes and stability updates\n• Performance optimizations",
-  "apkUrl": "https://habit-tracker-8cb6b.web.app/downloads/app-release.apk",
+  "apkUrl": "https://github.com/MrResolution/Habit-traker-/releases/download/v1.1.0/Habit.Tracker.v1.1.apk",
   "isForceUpdate": false
 }

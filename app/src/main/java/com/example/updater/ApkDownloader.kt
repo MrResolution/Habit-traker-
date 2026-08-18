@@ -55,6 +55,8 @@ class ApkDownloader(private val context: Context) {
                 val bytesDownloaded = if (bytesDownloadedIndex != -1) cursor.getInt(bytesDownloadedIndex) else 0
                 val bytesTotal = if (bytesTotalIndex != -1) cursor.getInt(bytesTotalIndex) else 0
                 val status = if (statusIndex != -1) cursor.getInt(statusIndex) else -1
+                val reasonIndex = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                val reasonCode = if (reasonIndex != -1) cursor.getInt(reasonIndex) else -1
 
                 cursor.close()
 
@@ -65,7 +67,18 @@ class ApkDownloader(private val context: Context) {
                     }
                     DownloadManager.STATUS_FAILED -> {
                         downloading = false
-                        emit(DownloadState.Failed("Download failed via DownloadManager."))
+                        val errorMessage = when (reasonCode) {
+                            DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "HTTP error returned by server."
+                            DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume download."
+                            DownloadManager.ERROR_DEVICE_NOT_FOUND -> "No external storage device found."
+                            DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File already exists."
+                            DownloadManager.ERROR_FILE_ERROR -> "Storage file error."
+                            DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient storage space."
+                            DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many HTTP redirects."
+                            DownloadManager.ERROR_UNKNOWN -> "Unknown download error."
+                            else -> if (reasonCode in 100..599) "HTTP Error $reasonCode (e.g. 404 Not Found)" else "Error code: $reasonCode"
+                        }
+                        emit(DownloadState.Failed("Download failed: $errorMessage"))
                     }
                     DownloadManager.STATUS_RUNNING, DownloadManager.STATUS_PENDING -> {
                         if (bytesTotal > 0) {
