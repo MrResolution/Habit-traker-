@@ -11,7 +11,7 @@ enum class ThemeMode {
 }
 
 class ThemePreferences(context: Context) {
-    private val prefs = context.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
 
     private val _themeMode = MutableStateFlow(
         ThemeMode.valueOf(prefs.getString("theme_mode", ThemeMode.AUTO.name) ?: ThemeMode.AUTO.name)
@@ -35,18 +35,6 @@ class ThemePreferences(context: Context) {
             putInt("selected_avatar_index", index)
         }
         _selectedAvatarIndex.value = index
-    }
-
-    private val _isAutoBackupEnabled = MutableStateFlow(
-        prefs.getBoolean("auto_backup_enabled", true)
-    )
-    val isAutoBackupEnabled: StateFlow<Boolean> = _isAutoBackupEnabled.asStateFlow()
-
-    fun setAutoBackupEnabled(enabled: Boolean) {
-        prefs.edit {
-            putBoolean("auto_backup_enabled", enabled)
-        }
-        _isAutoBackupEnabled.value = enabled
     }
 
     // Onboarding
@@ -84,5 +72,17 @@ class ThemePreferences(context: Context) {
             putString("user_profession", profession)
         }
         _profession.value = profession
+    }
+
+    private val _isSoundEnabled = MutableStateFlow(
+        prefs.getBoolean("sound_effects_enabled", true)
+    )
+    val isSoundEnabled: StateFlow<Boolean> = _isSoundEnabled.asStateFlow()
+
+    fun setSoundEnabled(enabled: Boolean) {
+        prefs.edit {
+            putBoolean("sound_effects_enabled", enabled)
+        }
+        _isSoundEnabled.value = enabled
     }
 }

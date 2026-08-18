@@ -15,7 +15,9 @@ import com.example.MainActivity
 import com.example.R
 import java.util.Calendar
 
+import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.net.Uri
 import com.example.data.AppDatabase
 import com.example.data.HabitRepository
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +26,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.widget.HabitProgressWidget
+import com.example.widget.QuickCheckInWidget
+import androidx.glance.appwidget.updateAll
 
 class NotificationReceiver : BroadcastReceiver() {
 
@@ -37,12 +42,16 @@ class NotificationReceiver : BroadcastReceiver() {
                 try {
                     val db = AppDatabase.getDatabase(context)
                     val repository = HabitRepository(db.habitDao())
-                    val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                    val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                     // Assume it's uncompleted and we toggle it to complete
                     repository.toggleHabitCompletion(habitId, dateStr)
                     
                     // Cancel this specific notification (we can just cancel all for simplicity)
                     NotificationManagerCompat.from(context).cancel(habitId)
+
+                    // Refresh widgets to reflect the updated state
+                    HabitProgressWidget().updateAll(context)
+                    QuickCheckInWidget().updateAll(context)
                 } finally {
                     pendingResult.finish()
                 }
@@ -64,15 +73,21 @@ class NotificationReceiver : BroadcastReceiver() {
 
     @SuppressLint("MissingPermission")
     private fun showNotification(context: Context, habitId: Int, habitName: String, habitDesc: String) {
-        val channelId = "habit_reminders"
+        val channelId = "habit_reminders_v2"
+        val soundUri: Uri = Uri.parse("android.resource://" + context.packageName + "/" + R.raw.notification_sound)
         
         // Create Notification Channel on Android O+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Habit Reminders"
             val descriptionText = "Get reminders to keep up with your daily habits"
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
             val channel = NotificationChannel(channelId, name, importance).apply {
                 description = descriptionText
+                setSound(soundUri, audioAttributes)
             }
             val notificationManager: NotificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -102,15 +117,13 @@ class NotificationReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Goal Reminder: $habitName")
             .setContentText(habitDesc)
             .setColor(android.graphics.Color.parseColor("#9D4EDD")) // Custom Color (Neon Purple)
-            .setSound(defaultSoundUri) // Custom Sound setup (using default for now)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setSound(soundUri)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_menu_edit, "Mark Done", markDonePendingIntent)
             .setAutoCancel(true)
@@ -142,7 +155,7 @@ class NotificationReceiver : BroadcastReceiver() {
                 )
 
                 // Parse time string e.g. "08:00"
-                val parts = time.split(":")
+                val parts = time.trim().split(":")
                 if (parts.size == 2) {
                     val hour = parts[0].toIntOrNull()
                     val minute = parts[1].toIntOrNull()

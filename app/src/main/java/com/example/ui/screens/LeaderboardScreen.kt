@@ -2,12 +2,16 @@ package com.example.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,17 +27,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.LeaderboardEntry
+import com.example.data.ScoringEngine
 import com.example.ui.theme.CyberTeal
 import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.StreakRose
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.example.ui.components.SkeletonLeaderboardCard
+import com.example.ui.components.SkeletonPodiumSection
 
 @Composable
 fun LeaderboardTab(
-    leaderboardEntries: List<LeaderboardEntry>
+    leaderboardEntries: List<LeaderboardEntry>,
+    isLoading: Boolean = false
 ) {
     val currentUserId = Firebase.auth.currentUser?.uid
+    var selectedEntryForBreakdown by remember { mutableStateOf<LeaderboardEntry?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -64,78 +73,106 @@ fun LeaderboardTab(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Compete with friends • Build habits together",
+                    text = "Fair Scoring • Tap any member to view detailed score breakdown",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        // Top 3 Podium
-        if (leaderboardEntries.size >= 3) {
+        if (isLoading) {
             item {
-                PodiumSection(entries = leaderboardEntries.take(3), currentUserId = currentUserId)
+                SkeletonPodiumSection()
             }
-        }
-
-        // Empty state
-        if (leaderboardEntries.isEmpty()) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.GroupAdd,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+            items(4) {
+                SkeletonLeaderboardCard()
+            }
+        } else {
+            // Top 3 Podium
+            if (leaderboardEntries.size >= 3) {
+                item {
+                    PodiumSection(
+                        entries = leaderboardEntries.take(3),
+                        currentUserId = currentUserId,
+                        onItemClick = { entry -> selectedEntryForBreakdown = entry }
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+
+            // Empty state
+            if (leaderboardEntries.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GroupAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(72.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No entries yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Invite friends and start tracking habits together!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+
+            // Full rankings list
+            if (leaderboardEntries.isNotEmpty()) {
+                item {
                     Text(
-                        text = "No entries yet",
+                        text = "Full Rankings",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(top = 8.dp)
                     )
-                    Text(
-                        text = "Invite friends and start tracking habits together!",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp)
+                }
+
+                itemsIndexed(
+                    items = leaderboardEntries,
+                    key = { index, entry -> if (entry.userId.isNotEmpty()) entry.userId else index.toString() }
+                ) { index, entry ->
+                    LeaderboardCard(
+                        rank = index + 1,
+                        entry = entry,
+                        isCurrentUser = entry.userId == currentUserId,
+                        onClick = { selectedEntryForBreakdown = entry }
                     )
                 }
             }
         }
+    }
 
-        // Full rankings list
-        if (leaderboardEntries.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Full Rankings",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            itemsIndexed(leaderboardEntries) { index, entry ->
-                LeaderboardCard(
-                    rank = index + 1,
-                    entry = entry,
-                    isCurrentUser = entry.userId == currentUserId
-                )
-            }
-        }
+    if (selectedEntryForBreakdown != null) {
+        ScoreBreakdownSheet(
+            entry = selectedEntryForBreakdown!!,
+            onDismiss = { selectedEntryForBreakdown = null }
+        )
     }
 }
 
 @Composable
-fun PodiumSection(entries: List<LeaderboardEntry>, currentUserId: String?) {
+fun PodiumSection(
+    entries: List<LeaderboardEntry>,
+    currentUserId: String?,
+    onItemClick: (LeaderboardEntry) -> Unit
+) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -157,7 +194,8 @@ fun PodiumSection(entries: List<LeaderboardEntry>, currentUserId: String?) {
                     entry = entries[1],
                     height = 90.dp,
                     color = Color(0xFFC0C0C0),
-                    isCurrentUser = entries[1].userId == currentUserId
+                    isCurrentUser = entries[1].userId == currentUserId,
+                    onClick = { onItemClick(entries[1]) }
                 )
             }
             // 1st place
@@ -166,7 +204,8 @@ fun PodiumSection(entries: List<LeaderboardEntry>, currentUserId: String?) {
                 entry = entries[0],
                 height = 120.dp,
                 color = Color(0xFFFFD700),
-                isCurrentUser = entries[0].userId == currentUserId
+                isCurrentUser = entries[0].userId == currentUserId,
+                onClick = { onItemClick(entries[0]) }
             )
             // 3rd place
             if (entries.size > 2) {
@@ -175,7 +214,8 @@ fun PodiumSection(entries: List<LeaderboardEntry>, currentUserId: String?) {
                     entry = entries[2],
                     height = 70.dp,
                     color = Color(0xFFCD7F32),
-                    isCurrentUser = entries[2].userId == currentUserId
+                    isCurrentUser = entries[2].userId == currentUserId,
+                    onClick = { onItemClick(entries[2]) }
                 )
             }
         }
@@ -188,7 +228,8 @@ fun PodiumItem(
     entry: LeaderboardEntry,
     height: androidx.compose.ui.unit.Dp,
     color: Color,
-    isCurrentUser: Boolean
+    isCurrentUser: Boolean,
+    onClick: () -> Unit = {}
 ) {
     val medal = when (rank) {
         1 -> "🥇"
@@ -196,10 +237,13 @@ fun PodiumItem(
         3 -> "🥉"
         else -> ""
     }
+    val levelInfo = ScoringEngine.calculateLevelInfo(entry.score)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(100.dp)
+        modifier = Modifier
+            .width(100.dp)
+            .clickable { onClick() }
     ) {
         // Avatar
         Box(
@@ -209,12 +253,6 @@ fun PodiumItem(
                 .background(
                     if (isCurrentUser) Brush.linearGradient(listOf(NeonPurple, CyberTeal))
                     else Brush.linearGradient(listOf(color.copy(alpha = 0.4f), color.copy(alpha = 0.2f)))
-                )
-                .then(
-                    if (isCurrentUser) Modifier.background(
-                        Brush.linearGradient(listOf(NeonPurple, CyberTeal)),
-                        CircleShape
-                    ) else Modifier
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -226,11 +264,11 @@ fun PodiumItem(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = medal,
-            fontSize = 20.sp
+            fontSize = 18.sp
         )
 
         Text(
@@ -241,6 +279,21 @@ fun PodiumItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+
+        // Level badge chip
+        Box(
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .background(NeonPurple.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 4.dp, vertical = 1.dp)
+        ) {
+            Text(
+                text = "Lvl ${levelInfo.level}",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = NeonPurple
+            )
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -278,7 +331,8 @@ fun PodiumItem(
 fun LeaderboardCard(
     rank: Int,
     entry: LeaderboardEntry,
-    isCurrentUser: Boolean
+    isCurrentUser: Boolean,
+    onClick: () -> Unit = {}
 ) {
     val rankColor = when (rank) {
         1 -> Color(0xFFFFD700)
@@ -288,18 +342,21 @@ fun LeaderboardCard(
     }
     
     val rankTextColor = when (rank) {
-        1 -> Color(0xFFB8860B) // Dark Goldenrod for readability
-        2 -> Color(0xFF757575) // Darker Silver
-        3 -> Color(0xFFA0522D) // Darker Bronze
+        1 -> Color(0xFFB8860B)
+        2 -> Color(0xFF757575)
+        3 -> Color(0xFFA0522D)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val levelInfo = ScoringEngine.calculateLevelInfo(entry.score)
 
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrentUser) NeonPurple.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier
@@ -367,6 +424,18 @@ fun LeaderboardCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Box(
+                        modifier = Modifier
+                            .background(NeonPurple.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "Lvl ${levelInfo.level}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeonPurple
+                        )
+                    }
                     if (isCurrentUser) {
                         Box(
                             modifier = Modifier
@@ -447,5 +516,170 @@ fun LeaderboardCard(
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScoreBreakdownSheet(
+    entry: LeaderboardEntry,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+        scrimColor = Color.Black.copy(alpha = 0.5f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // User avatar header
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(NeonPurple, CyberTeal))),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = entry.displayName.take(1).uppercase(),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp,
+                    color = Color.White
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = entry.displayName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            // Level chip
+            val levelInfo = ScoringEngine.calculateLevelInfo(entry.score)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = NeonPurple.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, NeonPurple.copy(alpha = 0.4f)),
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = NeonPurple, modifier = Modifier.size(14.dp))
+                    Text(
+                        text = "Level ${levelInfo.level}: ${levelInfo.title}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NeonPurple
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Total Score Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("TOTAL FAIR SCORE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = "${entry.score} pts",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = NeonPurple
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // XP Progress bar
+                    LinearProgressIndicator(
+                        progress = { levelInfo.progressPercent },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = CyberTeal,
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${levelInfo.currentLevelXp} / ${levelInfo.nextLevelXp} XP to Level ${levelInfo.level + 1}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Score Breakdown Details",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.align(Alignment.Start)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Breakdown Rows
+            val basePts = if (entry.basePoints > 0) entry.basePoints else (entry.totalCompletions * 10)
+            BreakdownItemRow(icon = Icons.Default.CheckCircle, iconTint = CyberTeal, title = "Base Completion Points", value = "+$basePts pts")
+            BreakdownItemRow(icon = Icons.Default.Whatshot, iconTint = StreakRose, title = "Multi-Habit Streak Synergy", value = "+${entry.streakSynergyPoints} pts")
+            BreakdownItemRow(icon = Icons.Default.Bolt, iconTint = Color(0xFFFFB300), title = "30-Day Consistency Multiplier", value = "${String.format("%.2f", entry.consistencyMultiplier)}x")
+            BreakdownItemRow(icon = Icons.Default.Star, iconTint = NeonPurple, title = "Perfect Day Bonuses", value = "+${entry.perfectDayBonus} pts")
+            BreakdownItemRow(icon = Icons.Default.MilitaryTech, iconTint = Color(0xFF4CAF50), title = "Milestone Achievements", value = "+${entry.milestoneBonus} pts")
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun BreakdownItemRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    title: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+            }
+            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+        }
+        Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = iconTint)
     }
 }

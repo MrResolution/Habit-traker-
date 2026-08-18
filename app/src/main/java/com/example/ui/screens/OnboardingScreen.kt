@@ -14,12 +14,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -46,14 +49,14 @@ fun OnboardingScreen(
     isGoogleUser: Boolean,
     onComplete: (OnboardingResult) -> Unit
 ) {
-    var currentStep by remember { mutableStateOf(0) }
+    var currentStep by rememberSaveable { mutableStateOf(0) }
     val totalSteps = if (isGoogleUser) 3 else 2 // Google users get a display name step
 
     // State
-    var displayName by remember { mutableStateOf(initialDisplayName) }
-    var selectedProfession by remember { mutableStateOf("") }
+    var displayName by rememberSaveable { mutableStateOf(initialDisplayName) }
+    var selectedProfession by rememberSaveable { mutableStateOf("") }
     var selectedHabits by remember { mutableStateOf(setOf<String>()) }
-    var avatarIndex by remember { mutableStateOf(1) }
+    var avatarIndex by rememberSaveable { mutableStateOf(1) }
 
     // Progress: starts at 20% (account created), fills to 100%
     val progressFraction = 0.20f + (0.80f * (currentStep.toFloat() / totalSteps.toFloat()))
@@ -100,7 +103,10 @@ fun OnboardingScreen(
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp)),
                         color = NeonPurple,
-                        trackColor = NeonPurple.copy(alpha = 0.12f)
+                        trackColor = NeonPurple.copy(alpha = 0.12f),
+                        strokeCap = StrokeCap.Round,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {}
                     )
                 }
 
@@ -153,7 +159,7 @@ fun OnboardingScreen(
                             modifier = Modifier.height(52.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple.copy(alpha = 0.3f))
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = NeonPurple)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = NeonPurple)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Back", color = NeonPurple, fontWeight = FontWeight.SemiBold)
                         }
@@ -196,7 +202,7 @@ fun OnboardingScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(
-                            imageVector = if (isLastStep) Icons.Default.Celebration else Icons.Default.ArrowForward,
+                            imageVector = if (isLastStep) Icons.Default.Celebration else Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null
                         )
                     }

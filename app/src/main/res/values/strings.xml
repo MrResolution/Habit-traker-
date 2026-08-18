@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Habit Tracker</string>
+    <string name="widget_progress_description">Today\'s habit progress at a glance</string>
+    <string name="widget_checkin_description">Quick one-tap habit check-in</string>
 </resources>

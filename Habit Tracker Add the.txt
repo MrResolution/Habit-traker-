@@ -1,0 +1,13 @@
+Habit Tracker:
+*Add the feature for frequent reminder in a day. ✅
+*Improve the login experience.✅
+*Work on on-boarding.  
+*Add a feature to see the date in the consistency map if long pressed.
+*Add widgets(check list, consistency graph,..)
+*Reward system - animation ( when completed 100% the user can press on the "100%" to get a random reward.)
+Reward++ (this system will include Ai automation based on the habits he has mapped the ai will identify the right type of rewards)
+*Improve notification system(The user will get notification remindering him of the incomplete habit tasks during his peak screen time 🤳*collect screen time data😁)
+*comit feature (the function that allows the user to sign to a task for extrim commitment. Once the users commits he has to feel the weight of not completing the task. During commuting 
+*When clicked on the users id in leader the board the other user can view his entire stats. 
+*Build a system that measures the puchility. 
+*Score math --- include screen time too

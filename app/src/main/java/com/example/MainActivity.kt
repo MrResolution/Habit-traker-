@@ -34,6 +34,15 @@ import androidx.compose.ui.platform.LocalContext
 
 import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.OnboardingResult
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+
+import com.example.updater.UpdateDialog
+import com.example.updater.UpdateInfo
+import com.example.updater.UpdaterApi
+import com.example.BuildConfig
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +53,23 @@ class MainActivity : ComponentActivity() {
             val themePreferences = remember { ThemePreferences(context) }
             val currentThemeMode by themePreferences.themeMode.collectAsState()
             val isSystemDark = isSystemInDarkTheme()
+
+            var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+
+            LaunchedEffect(Unit) {
+                runCatching {
+                    val retrofit = Retrofit.Builder()
+                        .baseUrl("https://habit-tracker-8cb6b.web.app/")
+                        .addConverterFactory(MoshiConverterFactory.create())
+                        .build()
+                    val updaterApi = retrofit.create(UpdaterApi::class.java)
+
+                    val updateInfo = updaterApi.getUpdateInfo("https://habit-tracker-8cb6b.web.app/version.json")
+                    if (updateInfo.versionCode > BuildConfig.VERSION_CODE) {
+                        availableUpdate = updateInfo
+                    }
+                }
+            }
             
             val darkTheme = when (currentThemeMode) {
                 ThemeMode.LIGHT -> false
@@ -77,8 +103,10 @@ class MainActivity : ComponentActivity() {
                             val user = (authState as AuthState.Authenticated).user
                             
                             var checkingOnboarding by remember { mutableStateOf(!isOnboardingComplete) }
+                            val coroutineScope = rememberCoroutineScope()
 
                             LaunchedEffect(user.uid) {
+                                habitViewModel.checkAndRestoreFromCloud()
                                 if (!isOnboardingComplete) {
                                     val isCompleteInCloud = authViewModel.checkIsOnboardingComplete()
                                     if (isCompleteInCloud) {
@@ -95,7 +123,7 @@ class MainActivity : ComponentActivity() {
                                 OnboardingScreen(
                                     initialDisplayName = user.displayName ?: "",
                                     isGoogleUser = isGoogleUser,
-                                    onComplete = { result ->
+                                    onComplete = { result: OnboardingResult ->
                                         // Save profile data
                                         themePreferences.setGender(result.gender)
                                         themePreferences.setProfession(result.profession)
@@ -110,24 +138,19 @@ class MainActivity : ComponentActivity() {
                                                 frequency = "daily",
                                                 targetCount = 1,
                                                 reminderTime = null,
-                                                isNotificationEnabled = false,
-                                                context = context
+                                                isNotificationEnabled = false
                                             )
                                         }
                                         
-                                        // Mark onboarding done
-                                        themePreferences.setOnboardingComplete(true)
-                                        
-                                        // Launch a coroutine using a side effect to update the cloud
+                                        coroutineScope.launch {
+                                            if (isGoogleUser && result.displayName.isNotBlank() && result.displayName != user.displayName) {
+                                                authViewModel.updateDisplayName(result.displayName)
+                                            }
+                                            authViewModel.markOnboardingComplete()
+                                            themePreferences.setOnboardingComplete(true)
+                                        }
                                     }
                                 )
-                                
-                                // Side effect to update cloud when onboarding completes
-                                LaunchedEffect(isOnboardingComplete) {
-                                    if (isOnboardingComplete) {
-                                        authViewModel.markOnboardingComplete()
-                                    }
-                                }
                             } else {
                                 MainDashboard(
                                     viewModel = habitViewModel,
@@ -138,6 +161,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                    }
+
+                    availableUpdate?.let { updateInfo ->
+                        UpdateDialog(
+                            updateInfo = updateInfo,
+                            onDismiss = { availableUpdate = null }
+                        )
                     }
                 }
             }

@@ -1,8 +1,12 @@
 package com.example.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 
+@IgnoreExtraProperties
 @Entity(tableName = "habits")
 data class Habit(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -15,15 +19,19 @@ data class Habit(
     val bestStreak: Int = 0,
     val createdTimestamp: Long = System.currentTimeMillis(),
     val reminderTime: String? = null, // "HH:mm" e.g., "08:00"
-    val isNotificationEnabled: Boolean = false,
+    @get:PropertyName("isNotificationEnabled") @set:PropertyName("isNotificationEnabled") var isNotificationEnabled: Boolean = false,
     val lastCompletedDate: String? = null // "yyyy-MM-dd" of last check-in to compute streaks
 )
 
-@Entity(tableName = "habit_logs")
+@IgnoreExtraProperties
+@Entity(
+    tableName = "habit_logs",
+    indices = [Index(value = ["habitId", "date"], unique = true)]
+)
 data class HabitLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val habitId: Int = 0,
     val date: String = "", // "yyyy-MM-dd"
-    val isCompleted: Boolean = true,
+    @get:PropertyName("isCompleted") @set:PropertyName("isCompleted") var isCompleted: Boolean = true,
     val timestamp: Long = System.currentTimeMillis()
 )

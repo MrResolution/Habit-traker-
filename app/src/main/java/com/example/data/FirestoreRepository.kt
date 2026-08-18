@@ -3,6 +3,7 @@ package com.example.data
 import android.util.Log
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.toObject
@@ -15,6 +16,7 @@ import kotlinx.coroutines.tasks.await
  * Firestore data classes matching the cloud schema.
  * These are used for syncing local Room data to Firestore for leaderboard functionality.
  */
+@IgnoreExtraProperties
 data class FirestoreUser(
     val userId: String = "",
     val displayName: String = "",
@@ -27,6 +29,7 @@ data class FirestoreUser(
     val joinedAt: Long = 0L
 )
 
+@IgnoreExtraProperties
 data class LeaderboardEntry(
     val userId: String = "",
     val displayName: String = "",
@@ -35,9 +38,17 @@ data class LeaderboardEntry(
     val currentStreak: Int = 0,
     val bestStreak: Int = 0,
     val score: Int = 0,
+    val level: Int = 1,
+    val levelTitle: String = "Novice",
+    val basePoints: Int = 0,
+    val streakSynergyPoints: Int = 0,
+    val consistencyMultiplier: Double = 1.0,
+    val perfectDayBonus: Int = 0,
+    val milestoneBonus: Int = 0,
     val lastUpdated: Long = 0L
 )
 
+@IgnoreExtraProperties
 data class CloudBackup(
     val habits: List<Habit> = emptyList(),
     val logs: List<HabitLog> = emptyList(),
@@ -58,7 +69,7 @@ class FirestoreRepository {
         private const val TAG = "FirestoreRepository"
     }
 
-    private fun getCurrentUserId(): String? = auth.currentUser?.uid
+    fun getCurrentUserId(): String? = auth.currentUser?.uid
 
     // ─── Leaderboard ────────────────────────────────────────────────────
 
@@ -71,6 +82,7 @@ class FirestoreRepository {
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Leaderboard listen failed", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val entries = snapshot?.documents?.mapNotNull { doc ->
@@ -87,19 +99,26 @@ class FirestoreRepository {
      */
     suspend fun syncLeaderboard(
         habits: List<Habit>,
-        totalCompletions: Int
+        logs: List<HabitLog> = emptyList(),
+        milestones: List<StreakMilestone> = emptyList()
     ) {
         val uid = getCurrentUserId() ?: return
         try {
             val userDoc = db.collection("users").document(uid).get().await()
+            if (!userDoc.exists()) {
+                Log.w(TAG, "User document not found for uid: $uid, skipping leaderboard sync")
+                return
+            }
             val displayName = userDoc.getString("displayName") ?: "Anonymous"
             val photoUrl = userDoc.getString("photoUrl") ?: ""
 
             val currentStreak = if (habits.isNotEmpty()) habits.maxOf { it.streak } else 0
             val bestStreak = if (habits.isNotEmpty()) habits.maxOf { it.bestStreak } else 0
+            val totalCompletions = logs.size
 
-            // Score formula: completions × 10 + bestStreak × 5 + currentStreak × 3
-            val score = totalCompletions * 10 + bestStreak * 5 + currentStreak * 3
+            // Use ScoringEngine for multi-dimensional fair scoring calculation
+            val breakdown = ScoringEngine.calculateScore(habits, logs, milestones)
+            val score = breakdown.totalScore
 
             val leaderboardData = hashMapOf(
                 "userId" to uid,
@@ -109,6 +128,13 @@ class FirestoreRepository {
                 "currentStreak" to currentStreak,
                 "bestStreak" to bestStreak,
                 "score" to score,
+                "level" to breakdown.levelInfo.level,
+                "levelTitle" to breakdown.levelInfo.title,
+                "basePoints" to breakdown.basePoints,
+                "streakSynergyPoints" to breakdown.streakSynergyPoints,
+                "consistencyMultiplier" to breakdown.consistencyMultiplier,
+                "perfectDayBonus" to breakdown.perfectDayBonus,
+                "milestoneBonus" to breakdown.milestoneBonus,
                 "lastUpdated" to System.currentTimeMillis()
             )
             db.collection("leaderboard").document(uid).set(leaderboardData).await()
@@ -118,7 +144,10 @@ class FirestoreRepository {
                 "totalHabits" to habits.size,
                 "currentStreak" to currentStreak,
                 "bestStreak" to bestStreak,
-                "totalCompletions" to totalCompletions
+                "totalCompletions" to totalCompletions,
+                "score" to score,
+                "level" to breakdown.levelInfo.level,
+                "levelTitle" to breakdown.levelInfo.title
             )
             db.collection("users").document(uid).update(userUpdates).await()
         } catch (e: Exception) {
@@ -142,21 +171,23 @@ class FirestoreRepository {
     }
 
     /**
-     * Backups all user state (habits, logs, milestones) to the cloud.
+     * Backups all user state (habits, logs, milestones) to the cloud automatically.
      */
-    suspend fun backupUserData(habits: List<Habit>, logs: List<HabitLog>, milestones: List<StreakMilestone>) {
-        val uid = getCurrentUserId() ?: return
-        try {
+    suspend fun backupUserData(habits: List<Habit>, logs: List<HabitLog>, milestones: List<StreakMilestone>): Boolean {
+        val uid = getCurrentUserId() ?: return false
+        return try {
             val backup = CloudBackup(habits, logs, milestones, System.currentTimeMillis())
             db.collection("users").document(uid).collection("data").document("backup").set(backup).await()
             Log.d(TAG, "Successfully backed up user data")
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to backup user data", e)
+            false
         }
     }
 
     /**
-     * Restores all user state from the cloud.
+     * Restores all user state from the cloud automatically upon first launch/login.
      */
     suspend fun restoreUserData(): CloudBackup? {
         val uid = getCurrentUserId() ?: return null

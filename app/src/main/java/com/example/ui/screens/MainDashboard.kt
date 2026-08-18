@@ -6,8 +6,13 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -17,16 +22,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -43,6 +58,24 @@ import com.example.data.ThemePreferences
 import com.example.ui.components.CategoryDonutChart
 import com.example.ui.components.MonthlyHeatmapGrid
 import com.example.ui.components.WeeklyTrendChart
+import com.example.ui.components.SkeletonChartCard
+import com.example.ui.components.SkeletonHabitCard
+import com.example.ui.components.SkeletonHeaderSection
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.ui.theme.CyberTeal
 import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.StreakRose
@@ -64,10 +97,23 @@ fun MainDashboard(
     val milestones by viewModel.milestones.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val leaderboardEntries by viewModel.leaderboardEntries.collectAsState()
+    val scoreBreakdown by viewModel.scoreBreakdown.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
-    var activeTab by remember { mutableStateOf("today") } // "today", "charts", "leaderboard", "manage"
-    var showAddHabitDialog by remember { mutableStateOf(false) }
-    var showProfileSheet by remember { mutableStateOf(false) }
+    var activeTab by rememberSaveable { mutableStateOf("today") } // "today", "charts", "leaderboard", "manage"
+    var showAddHabitDialog by rememberSaveable { mutableStateOf(false) }
+    var showProfileSheet by rememberSaveable { mutableStateOf(false) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshTodayDate()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // Check & Ask Notification Permission
     var hasNotificationPermission by remember {
@@ -128,12 +174,29 @@ fun MainDashboard(
                         Spacer(modifier = Modifier.width(12.dp))
                         
                         Column {
-                            Text(
-                                text = "Hi, $userName",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Hi, $userName",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(NeonPurple.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Lvl ${scoreBreakdown.levelInfo.level}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NeonPurple
+                                    )
+                                }
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = androidx.compose.material.icons.Icons.Default.LocalFireDepartment,
@@ -144,7 +207,7 @@ fun MainDashboard(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 val totalStreak = habits.sumOf { it.streak }
                                 Text(
-                                    text = "$totalStreak Day Streak",
+                                    text = "$totalStreak Day Streak • ${scoreBreakdown.totalScore} pts",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -214,6 +277,8 @@ fun MainDashboard(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            val isSoundEnabled by themePreferences.isSoundEnabled.collectAsState()
+
             when (activeTab) {
                 "today" -> TodayTab(
                     habits = habits,
@@ -226,37 +291,31 @@ fun MainDashboard(
                         }
                     },
                     onToggle = { habitId -> viewModel.toggleHabitCompletion(habitId, selectedDate) },
-                    onDelete = { habit -> viewModel.deleteHabit(habit, context) },
-                    onAddClick = { showAddHabitDialog = true }
+                    onDelete = { habit -> viewModel.deleteHabit(habit) },
+                    onAddClick = { showAddHabitDialog = true },
+                    isLoading = isLoading,
+                    isSoundEnabled = isSoundEnabled
                 )
                 "charts" -> ChartsTab(
                     habits = habits,
                     logs = logs,
-                    milestones = milestones
+                    milestones = milestones,
+                    isLoading = isLoading
                 )
                 "leaderboard" -> LeaderboardTab(
-                    leaderboardEntries = leaderboardEntries
+                    leaderboardEntries = leaderboardEntries,
+                    isLoading = isLoading
                 )
                 "manage" -> ManageTab(
                     habits = habits,
                     onToggleNotification = { habit, enabled ->
-                        viewModel.updateHabit(habit.copy(isNotificationEnabled = enabled), context)
+                        viewModel.updateHabit(habit.copy(isNotificationEnabled = enabled))
                     },
-                    onDelete = { habit -> viewModel.deleteHabit(habit, context) },
-                    themePreferences = themePreferences,
-                    onBackup = {
-                        viewModel.forceBackup()
-                        android.widget.Toast.makeText(context, "Backup initiated", android.widget.Toast.LENGTH_SHORT).show()
+                    onUpdateHabit = { updatedHabit ->
+                        viewModel.updateHabit(updatedHabit)
                     },
-                    onRestore = {
-                        viewModel.restoreFromCloud { success ->
-                            if (success) {
-                                android.widget.Toast.makeText(context, "Restored successfully", android.widget.Toast.LENGTH_SHORT).show()
-                            } else {
-                                android.widget.Toast.makeText(context, "No backup found", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
+                    onDelete = { habit -> viewModel.deleteHabit(habit) },
+                    themePreferences = themePreferences
                 )
             }
 
@@ -264,7 +323,7 @@ fun MainDashboard(
                 AddHabitDialog(
                     onDismiss = { showAddHabitDialog = false },
                     onConfirm = { name, desc, category, freq, target, reminder, notifEnabled ->
-                        viewModel.addHabit(name, desc, category, freq, target, reminder, notifEnabled, context)
+                        viewModel.addHabit(name, desc, category, freq, target, reminder, notifEnabled)
                         showAddHabitDialog = false
                     }
                 )
@@ -297,13 +356,33 @@ fun TodayTab(
     onRequestPermission: () -> Unit,
     onToggle: (Int) -> Unit,
     onDelete: (Habit) -> Unit,
-    onAddClick: () -> Unit
+    onAddClick: () -> Unit,
+    isLoading: Boolean = false,
+    isSoundEnabled: Boolean = true
 ) {
-    val logsToday = logs.filter { it.date == selectedDate }
-    val completedIds = logsToday.map { it.habitId }.toSet()
+    if (isLoading) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            item {
+                SkeletonHeaderSection()
+            }
+            items(4) {
+                SkeletonHabitCard()
+            }
+        }
+        return
+    }
+
+    val logsToday = remember(logs, selectedDate) { logs.filter { it.date == selectedDate } }
+    val completedIds = remember(logsToday) { logsToday.map { it.habitId }.toSet() }
 
     val totalHabits = habits.size
-    val completedCount = habits.count { completedIds.contains(it.id) }
+    val completedCount = remember(habits, completedIds) { habits.count { completedIds.contains(it.id) } }
     val completionPercent = if (totalHabits > 0) (completedCount.toFloat() / totalHabits) else 0f
 
     LazyColumn(
@@ -318,7 +397,8 @@ fun TodayTab(
             HeaderSection(
                 completionPercent = completionPercent,
                 completedCount = completedCount,
-                totalHabits = totalHabits
+                totalHabits = totalHabits,
+                selectedDate = selectedDate
             )
         }
 
@@ -358,11 +438,14 @@ fun TodayTab(
         } else {
             items(habits, key = { it.id }) { habit ->
                 val isCompleted = completedIds.contains(habit.id)
+                val isAllCompletedAfterThis = completedCount + 1 == totalHabits && !isCompleted
                 HabitItemCard(
                     habit = habit,
                     isCompleted = isCompleted,
-                    onToggle = { onToggle(habit.id) },
-                    onDelete = { onDelete(habit) }
+                    onToggle = onToggle,
+                    onDelete = onDelete,
+                    isSoundEnabled = isSoundEnabled,
+                    isAllCompletedAfterThis = isAllCompletedAfterThis
                 )
             }
         }
@@ -370,90 +453,428 @@ fun TodayTab(
 }
 
 @Composable
+fun SmoothComplimentText(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    var startAnim by remember { mutableStateOf(false) }
+
+    LaunchedEffect(text) {
+        startAnim = true
+    }
+
+    val offsetY by animateFloatAsState(
+        targetValue = if (startAnim) 0f else 60f,
+        animationSpec = tween(
+            durationMillis = 650,
+            easing = FastOutSlowInEasing
+        ),
+        label = "smoothOffsetY"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (startAnim) 1f else 0.85f,
+        animationSpec = tween(
+            durationMillis = 650,
+            easing = FastOutSlowInEasing
+        ),
+        label = "smoothScale"
+    )
+
+    val alpha by animateFloatAsState(
+        targetValue = if (startAnim) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 450,
+            easing = LinearEasing
+        ),
+        label = "smoothAlpha"
+    )
+
+    Text(
+        text = text,
+        fontSize = 42.sp,
+        fontWeight = FontWeight.Black,
+        color = Color.White,
+        textAlign = TextAlign.Center,
+        letterSpacing = 2.sp,
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                translationY = offsetY
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 fun HeaderSection(
     completionPercent: Float,
     completedCount: Int,
-    totalHabits: Int
+    totalHabits: Int,
+    selectedDate: String = ""
 ) {
+    val is100Percent = completionPercent >= 1.0f && totalHabits > 0
+    val view = LocalView.current
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    val vibrator = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        }
+    }
+
+    val soundManager = remember(context) { com.example.util.SoundManager.getInstance(context) }
+
+    fun startContinuousVibration() {
+        try {
+            view.isHapticFeedbackEnabled = true
+            vibrator?.let { v ->
+                if (v.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val timings = longArrayOf(0, 15, 15)
+                        val amplitudes = intArrayOf(0, 140, 220)
+                        val effect = android.os.VibrationEffect.createWaveform(timings, amplitudes, 0)
+                        v.vibrate(effect)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        v.vibrate(longArrayOf(0, 100, 100), 0)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    fun stopVibration(isSuccess: Boolean) {
+        try {
+            vibrator?.cancel()
+            if (isSuccess) {
+                view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+                soundManager.playReward(true, view)
+                vibrator?.let { v ->
+                    if (v.hasVibrator()) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val effect = android.os.VibrationEffect.createOneShot(220L, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                            v.vibrate(effect)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            v.vibrate(220L)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    val dailyCompliment = remember(selectedDate) {
+        val compliments = listOf(
+            "UNSTOPPABLE",
+            "LEGENDARY",
+            "UNMATCHED",
+            "FLAWLESS",
+            "PURE GENIUS",
+            "PHENOMENAL",
+            "CHAMPION",
+            "VICTORIOUS",
+            "MASTERPIECE",
+            "PERFECTION"
+        )
+        val dateKey = if (selectedDate.isNotEmpty()) {
+            selectedDate
+        } else {
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        }
+        val index = kotlin.math.abs(dateKey.hashCode()) % compliments.size
+        compliments[index]
+    }
+
+    var isHolding by remember { mutableStateOf(false) }
+    var holdProgress by remember { mutableFloatStateOf(0f) }
+    var isUnlocked by remember { mutableStateOf(false) }
+
+    LaunchedEffect(is100Percent) {
+        if (!is100Percent) {
+            isUnlocked = false
+            isHolding = false
+            holdProgress = 0f
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "HeaderColorAnimation")
+    val hueShift by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "hueShift"
+    )
+
+    val animColor1 = remember(hueShift) { Color.hsv(hueShift % 360f, 0.75f, 0.95f) }
+    val animColor2 = remember(hueShift) { Color.hsv((hueShift + 120f) % 360f, 0.75f, 0.95f) }
+    val animColor3 = remember(hueShift) { Color.hsv((hueShift + 240f) % 360f, 0.75f, 0.95f) }
+
+    val cardBrush = if (isUnlocked || isHolding) {
+        Brush.linearGradient(
+            colors = listOf(
+                animColor1.copy(alpha = 0.55f),
+                animColor2.copy(alpha = 0.45f),
+                animColor3.copy(alpha = 0.55f)
+            )
+        )
+    } else if (is100Percent) {
+        Brush.linearGradient(
+            colors = listOf(
+                NeonPurple.copy(alpha = 0.35f),
+                CyberTeal.copy(alpha = 0.25f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                NeonPurple.copy(alpha = 0.25f),
+                CyberTeal.copy(alpha = 0.1f)
+            )
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 140.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        NeonPurple.copy(alpha = 0.25f),
-                        CyberTeal.copy(alpha = 0.1f)
-                    )
-                )
+            .background(cardBrush)
+            .then(
+                if (is100Percent && !isUnlocked) {
+                    Modifier.pointerInput(is100Percent, isUnlocked) {
+                        detectTapGestures(
+                            onPress = {
+                                isHolding = true
+                                holdProgress = 0f
+                                val startTime = System.currentTimeMillis()
+                                val holdDuration = 1500L
+                                var completed = false
+
+                                startContinuousVibration()
+                                soundManager.startProcessSound(true, view)
+
+                                val job = coroutineScope.launch {
+                                    val step = 30L
+                                    while (isActive) {
+                                        delay(step)
+                                        val elapsed = System.currentTimeMillis() - startTime
+                                        holdProgress = (elapsed.toFloat() / holdDuration).coerceIn(0f, 1f)
+
+                                        if (elapsed % 150L < step) {
+                                            view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                        }
+
+                                        if (elapsed >= holdDuration) {
+                                            completed = true
+                                            holdProgress = 1f
+                                            stopVibration(isSuccess = true)
+                                            isUnlocked = true
+                                            isHolding = false
+                                            break
+                                        }
+                                    }
+                                }
+
+                                try {
+                                    awaitRelease()
+                                } finally {
+                                    if (!completed) {
+                                        job.cancel()
+                                        soundManager.stopProcessSound()
+                                        stopVibration(isSuccess = false)
+                                        isHolding = false
+                                        holdProgress = 0f
+                                    }
+                                }
+                            }
+                        )
+                    }
+                } else Modifier
             )
-            .padding(24.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Daily Progress",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (totalHabits > 0) {
-                        "You've completed $completedCount of $totalHabits habits today."
-                    } else {
-                        "No habits setup yet. Create your first goal to get started!"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Interactive motivational quote
-                Box(
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "“Consistency beats intensity.”",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CyberTeal,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Dynamic progress arc
-            Box(
-                modifier = Modifier.size(84.dp),
-                contentAlignment = Alignment.Center
+        if (isHolding && !isUnlocked) {
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(24.dp))
             ) {
-                CircularProgressIndicator(
-                    progress = { completionPercent },
-                    modifier = Modifier.fillMaxSize(),
-                    color = NeonPurple,
-                    strokeWidth = 8.dp,
-                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                val width = size.width
+                val height = size.height
+                val fogRadius = (width * 0.9f) * (0.35f + holdProgress * 0.65f)
+                val alphaDensity = (0.35f + holdProgress * 0.6f).coerceIn(0f, 0.95f)
+
+                val angleRad = Math.toRadians((hueShift * 2.5).toDouble())
+                val offsetX1 = width * 0.35f + (Math.cos(angleRad) * width * 0.18f).toFloat()
+                val offsetY1 = height * 0.45f + (Math.sin(angleRad) * height * 0.22f).toFloat()
+
+                val offsetX2 = width * 0.65f - (Math.cos(angleRad) * width * 0.18f).toFloat()
+                val offsetY2 = height * 0.55f - (Math.sin(angleRad) * height * 0.22f).toFloat()
+
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            animColor1.copy(alpha = alphaDensity),
+                            animColor2.copy(alpha = alphaDensity * 0.7f),
+                            Color.Transparent
+                        ),
+                        center = Offset(offsetX1, offsetY1),
+                        radius = fogRadius
+                    )
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${(completionPercent * 100).toInt()}%",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            animColor3.copy(alpha = alphaDensity * 0.85f),
+                            animColor1.copy(alpha = alphaDensity * 0.5f),
+                            Color.Transparent
+                        ),
+                        center = Offset(offsetX2, offsetY2),
+                        radius = fogRadius * 0.9f
                     )
-                    Text(
-                        text = "Done",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = alphaDensity * 0.45f),
+                            animColor2.copy(alpha = alphaDensity * 0.65f),
+                            Color.Transparent
+                        ),
+                        center = Offset(width * 0.5f, height * 0.5f),
+                        radius = fogRadius * 1.15f
                     )
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 140.dp)
+                .padding(24.dp)
+                .clipToBounds(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isUnlocked) {
+                AnimatedVisibility(
+                    visible = isUnlocked,
+                    enter = slideInVertically(
+                        initialOffsetY = { fullHeight -> fullHeight * 2 },
+                        animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing)
+                    ) + fadeIn(animationSpec = tween(durationMillis = 500)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { fullHeight -> -fullHeight }
+                    ) + fadeOut()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp)
+                            .clickable {
+                                soundManager.playReward(true, view)
+                                view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+                            }
+                            .testTag("unlocked_compliment_section"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        SmoothComplimentText(
+                            text = dailyCompliment,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("compliment_rolling_text")
+                        )
+                    }
+                }
+            } else if (!isHolding) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Daily Progress",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (totalHabits > 0) {
+                                "You've completed $completedCount of $totalHabits habits today."
+                            } else {
+                                "No habits setup yet. Create your first goal to get started!"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (is100Percent) {
+                                        Brush.horizontalGradient(listOf(NeonPurple.copy(alpha = 0.3f), CyberTeal.copy(alpha = 0.3f)))
+                                    } else {
+                                        Brush.linearGradient(listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)))
+                                    }
+                                )
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .testTag("hold_me_dialog_badge")
+                        ) {
+                            Text(
+                                text = if (is100Percent) "“Click me!”" else "“Consistency beats intensity.”",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (is100Percent) NeonPurple else CyberTeal,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Box(
+                        modifier = Modifier.size(84.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { completionPercent },
+                            modifier = Modifier.fillMaxSize(),
+                            color = if (is100Percent) CyberTeal else NeonPurple,
+                            strokeWidth = 8.dp,
+                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${(completionPercent * 100).toInt()}%",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Done",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -551,13 +972,32 @@ fun EmptyStateCard(onAddClick: () -> Unit) {
 fun HabitItemCard(
     habit: Habit,
     isCompleted: Boolean,
-    onToggle: () -> Unit,
-    onDelete: () -> Unit
+    onToggle: (Int) -> Unit,
+    onDelete: (Habit) -> Unit,
+    isSoundEnabled: Boolean = true,
+    isAllCompletedAfterThis: Boolean = false
 ) {
+    val context = LocalContext.current
+    val soundManager = remember(context) { com.example.util.SoundManager.getInstance(context) }
+    val haptic = LocalHapticFeedback.current
+
+    val checkScale by animateFloatAsState(
+        targetValue = if (isCompleted) 1.12f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "checkScale"
+    )
+
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isCompleted) NeonPurple.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+            containerColor = if (isCompleted) NeonPurple.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isCompleted) NeonPurple.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -572,12 +1012,29 @@ fun HabitItemCard(
             // Circle checkbox
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(32.dp)
+                    .graphicsLayer {
+                        scaleX = checkScale
+                        scaleY = checkScale
+                    }
                     .clip(CircleShape)
                     .background(
                         if (isCompleted) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                     )
-                    .clickable { onToggle() }
+                    .clickable {
+                        if (!isCompleted) {
+                            if (isAllCompletedAfterThis) {
+                                soundManager.playTaskCompleteAll(isSoundEnabled)
+                            } else {
+                                soundManager.playTaskCheck(isSoundEnabled)
+                            }
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        } else {
+                            soundManager.playTaskUncheck(isSoundEnabled)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        onToggle(habit.id)
+                    }
                     .testTag("habit_checkbox_${habit.id}"),
                 contentAlignment = Alignment.Center
             ) {
@@ -586,7 +1043,7 @@ fun HabitItemCard(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Completed",
                         tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -625,9 +1082,9 @@ fun HabitItemCard(
                                     "Mindfulness" -> NeonPurple.copy(alpha = 0.15f)
                                     else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                 },
-                                shape = RoundedCornerShape(6.dp)
+                                shape = RoundedCornerShape(8.dp)
                             )
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = habit.category,
@@ -645,8 +1102,8 @@ fun HabitItemCard(
                     // Frequency Tag
                     Box(
                         modifier = Modifier
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = habit.frequency,
@@ -661,7 +1118,7 @@ fun HabitItemCard(
                             imageVector = Icons.Default.Notifications,
                             contentDescription = "Notifications active",
                             tint = CyberTeal,
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
@@ -675,7 +1132,7 @@ fun HabitItemCard(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                    .padding(8.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Whatshot,
@@ -692,7 +1149,7 @@ fun HabitItemCard(
             }
 
             IconButton(
-                onClick = onDelete,
+                onClick = { onDelete(habit) },
                 modifier = Modifier.testTag("delete_habit_${habit.id}")
             ) {
                 Icon(
@@ -710,10 +1167,62 @@ fun HabitItemCard(
 fun ChartsTab(
     habits: List<Habit>,
     logs: List<HabitLog>,
-    milestones: List<StreakMilestone>
+    milestones: List<StreakMilestone>,
+    isLoading: Boolean = false
 ) {
+    if (isLoading) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            items(3) {
+                SkeletonChartCard()
+            }
+        }
+        return
+    }
     val totalHabits = habits.size
     val totalLogs = logs.size
+    val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    var screenTimeStr by remember { mutableStateOf("Calculating...") }
+    var hasUsagePermission by remember { mutableStateOf(true) }
+
+    suspend fun checkAndFetchScreenTime() {
+        val permissionGranted = hasUsageStatsPermission(context)
+        hasUsagePermission = permissionGranted
+        if (!permissionGranted) {
+            screenTimeStr = "Permission Required"
+        } else {
+            val totalTime = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                getTodayScreenTimeMillis(context)
+            }
+            val hours = totalTime / (1000 * 60 * 60)
+            val minutes = (totalTime / (1000 * 60)) % 60
+            screenTimeStr = "${hours}h ${minutes}m"
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        checkAndFetchScreenTime()
+    }
+
+    val coroutineScope = rememberCoroutineScope()
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                coroutineScope.launch { checkAndFetchScreenTime() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val categoryCounts = habits.groupBy { it.category }.mapValues { it.value.size }
     val maxStreak = if (habits.isNotEmpty()) habits.maxOf { it.bestStreak } else 0
@@ -738,6 +1247,55 @@ fun ChartsTab(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // Screen Time Card
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Timer, contentDescription = null, tint = NeonPurple)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Screen Time Today", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(screenTimeStr, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        if (!hasUsagePermission) {
+                            Text("Requires usage access permission", fontSize = 10.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (!hasUsagePermission) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                                        data = android.net.Uri.parse("package:${context.packageName}")
+                                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    val fallbackIntent = android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(fallbackIntent)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                        ) {
+                            Text("Grant", fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
 
@@ -954,11 +1512,12 @@ fun MilestoneItemCard(milestone: StreakMilestone, currentBestStreak: Int) {
 fun ManageTab(
     habits: List<Habit>,
     onToggleNotification: (Habit, Boolean) -> Unit,
+    onUpdateHabit: (Habit) -> Unit,
     onDelete: (Habit) -> Unit,
-    themePreferences: ThemePreferences,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit
+    themePreferences: ThemePreferences
 ) {
+    var habitToEditTime by remember { mutableStateOf<Habit?>(null) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1010,76 +1569,75 @@ fun ManageTab(
         }
 
         item {
-            Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-            Spacer(modifier = Modifier.height(8.dp))
+            val isSoundEnabled by themePreferences.isSoundEnabled.collectAsState()
             Column {
                 Text(
-                    text = "Cloud Sync",
+                    text = "Audio & Feedback",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Backup and restore your data across devices.",
+                    text = "Sound effects and tactile feedback settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(
-                        onClick = onBackup,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CloudUpload, contentDescription = "Backup", modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Backup")
-                    }
-                    Button(
-                        onClick = onRestore,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberTeal)
-                    ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = "Restore", modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Restore")
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                val autoBackupEnabled by themePreferences.isAutoBackupEnabled.collectAsState()
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Auto-Backup",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(NeonPurple.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = "Sound Effects",
+                                    tint = NeonPurple,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Task Sound Effects (SFX)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Play audio feedback when checking off tasks",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = isSoundEnabled,
+                            onCheckedChange = { themePreferences.setSoundEnabled(it) },
+                            modifier = Modifier.testTag("sfx_toggle_switch")
                         )
-                        Text(
-                            text = "Backup to cloud when habits change",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
-                    Switch(
-                        checked = autoBackupEnabled,
-                        onCheckedChange = { themePreferences.setAutoBackupEnabled(it) },
-                        colors = SwitchDefaults.colors(checkedThumbColor = CyberTeal, checkedTrackColor = CyberTeal.copy(alpha = 0.5f))
-                    )
                 }
             }
         }
 
         item {
-            Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
             Spacer(modifier = Modifier.height(8.dp))
             Column {
                 Text(
@@ -1150,7 +1708,7 @@ fun ManageTab(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
 
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -1194,6 +1752,15 @@ fun ManageTab(
                                         )
                                     }
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(onClick = { habitToEditTime = habit }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Time",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
 
                             Switch(
@@ -1207,6 +1774,17 @@ fun ManageTab(
             }
         }
     }
+
+    if (habitToEditTime != null) {
+        EditReminderDialog(
+            initialReminderTime = habitToEditTime!!.reminderTime,
+            onDismiss = { habitToEditTime = null },
+            onConfirm = { newTime ->
+                onUpdateHabit(habitToEditTime!!.copy(reminderTime = newTime))
+                habitToEditTime = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -1217,6 +1795,7 @@ fun AddHabitDialog(
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("Health") }
+    var customCategory by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf("Daily") }
     var reminderTimes by remember { mutableStateOf(listOf<String>()) }
     var currentReminderHour by remember { mutableStateOf("08") }
@@ -1224,203 +1803,304 @@ fun AddHabitDialog(
     var currentAmPm by remember { mutableStateOf("AM") }
     var isNotificationEnabled by remember { mutableStateOf(false) }
 
-    val categories = listOf("Health", "Fitness", "Mindfulness", "Productivity", "Custom")
+    val categoriesWithIcons = listOf(
+        Triple("Health", "❤️", "Health"),
+        Triple("Fitness", "🏋️", "Fitness"),
+        Triple("Mindfulness", "🧘", "Mindfulness"),
+        Triple("Productivity", "⚡", "Productivity"),
+        Triple("Custom", "✨", "Custom")
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create New Habit") },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(NeonPurple.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = NeonPurple, modifier = Modifier.size(20.dp))
+                    }
+                    Text(
+                        text = "New Habit",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Name field
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Habit Name") },
-                    placeholder = { Text("e.g., Read 10 Pages") },
+                    placeholder = { Text("e.g. Read 15 pages") },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_habit_name")
                 )
 
+                // Goal/Description field
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Short Goal / Motivating Note") },
-                    placeholder = { Text("e.g., Learn Compose navigation") },
+                    label = { Text("Motivating Goal") },
+                    placeholder = { Text("e.g. Expand knowledge daily") },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_habit_description")
                 )
 
-                // Category selector
-                Column {
-                    Text("Category", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
+                // Minimalist Category Pills
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Category", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        categories.take(3).forEach { cat ->
-                            val isSelected = category == cat
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        if (isSelected) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
-                                    )
-                                    .clickable { category = cat }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
+                        categoriesWithIcons.forEach { (catKey, emoji, label) ->
+                            val isSelected = category == catKey
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                                border = if (isSelected) BorderStroke(1.dp, NeonPurple) else null,
+                                modifier = Modifier.clickable { category = catKey }
                             ) {
-                                Text(
-                                    text = cat,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        categories.drop(3).forEach { cat ->
-                            val isSelected = category == cat
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        if (isSelected) NeonPurple else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(emoji, fontSize = 13.sp)
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
                                     )
-                                    .clickable { category = cat }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = cat,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                                )
+                                }
                             }
                         }
                     }
                 }
 
-                // Reminder section
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Daily Reminder", style = MaterialTheme.typography.bodyMedium)
-                        Text("Get notified when it is time", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = isNotificationEnabled,
-                        onCheckedChange = { isNotificationEnabled = it },
-                        modifier = Modifier.testTag("switch_dialog_notif")
+                AnimatedVisibility(visible = category == "Custom") {
+                    OutlinedTextField(
+                        value = customCategory,
+                        onValueChange = { customCategory = it },
+                        label = { Text("Custom Category Name") },
+                        placeholder = { Text("e.g. Learning") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                if (isNotificationEnabled) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                // Frequency segment
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Frequency", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                            .padding(3.dp)
                     ) {
-                        val parseFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                        val displayFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
-                        reminderTimes.forEach { time ->
-                            val displayTime = try {
-                                parseFormat.parse(time)?.let { displayFormat.format(it) } ?: time
-                            } catch(e: Exception) { time }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                        listOf("Daily", "Weekly").forEach { freq ->
+                            val isSelected = frequency == freq
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(if (isSelected) NeonPurple else Color.Transparent)
+                                    .clickable { frequency = freq }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(displayTime)
-                                IconButton(onClick = { reminderTimes = reminderTimes.filter { it != time } }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Remove")
-                                }
+                                Text(
+                                    text = freq,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                )
                             }
                         }
+                    }
+                }
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = currentReminderHour,
-                                onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..12)) currentReminderHour = it },
-                                label = { Text("Hour") },
-                                modifier = Modifier.width(72.dp).testTag("input_reminder_hour"),
-                                keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                            )
-                            Text(" : ", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 8.dp))
-                            OutlinedTextField(
-                                value = currentReminderMinute,
-                                onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..59)) currentReminderMinute = it },
-                                label = { Text("Min") },
-                                modifier = Modifier.width(72.dp).testTag("input_reminder_minute"),
-                                keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                // Daily Reminder Switch & Time Picker
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Daily Reminder", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("Receive push notifications", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = isNotificationEnabled,
+                            onCheckedChange = { isNotificationEnabled = it },
+                            modifier = Modifier.testTag("switch_dialog_notif")
+                        )
+                    }
+
+                    if (isNotificationEnabled) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Quick Presets
                             Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clickable { currentAmPm = "AM" }
-                                        .background(if (currentAmPm == "AM") NeonPurple else Color.Transparent)
-                                        .padding(horizontal = 8.dp, vertical = 12.dp)
-                                ) {
-                                    Text("AM", color = if (currentAmPm == "AM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clickable { currentAmPm = "PM" }
-                                        .background(if (currentAmPm == "PM") NeonPurple else Color.Transparent)
-                                        .padding(horizontal = 8.dp, vertical = 12.dp)
-                                ) {
-                                    Text("PM", color = if (currentAmPm == "PM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                listOf(Triple("08:00", "🌅 08:00 AM", "08"), Triple("13:00", "☀️ 01:00 PM", "01"), Triple("20:00", "🌙 08:00 PM", "08")).forEach { (t24, label, hStr) ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (t24 in reminderTimes) CyberTeal.copy(alpha = 0.2f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                if (t24 !in reminderTimes) reminderTimes = reminderTimes + t24
+                                            }
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(vertical = 6.dp)
+                                        )
+                                    }
                                 }
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = { 
-                                    if (currentReminderHour.isNotEmpty() && currentReminderMinute.isNotEmpty()) {
-                                        var hInt = currentReminderHour.toIntOrNull() ?: 8
-                                        if (hInt == 0) hInt = 12
-                                        var h24 = hInt
-                                        if (currentAmPm == "AM" && h24 == 12) h24 = 0
-                                        if (currentAmPm == "PM" && h24 < 12) h24 += 12
-                                        val h = h24.toString().padStart(2, '0')
-                                        val m = currentReminderMinute.padStart(2, '0')
-                                        val formattedTime = "$h:$m"
-                                        if (formattedTime !in reminderTimes) {
-                                            reminderTimes = reminderTimes + formattedTime
+
+                            // Added times chips
+                            val parseFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                            val displayFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+                            reminderTimes.forEach { time ->
+                                val displayTime = try {
+                                    parseFormat.parse(time)?.let { displayFormat.format(it) } ?: time
+                                } catch (e: Exception) { time }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(displayTime, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        IconButton(onClick = { reminderTimes = reminderTimes.filter { it != time } }, modifier = Modifier.size(24.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                                         }
                                     }
                                 }
+                            }
+
+                            // Input fields matching test tags
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Add Time", tint = NeonPurple)
+                                OutlinedTextField(
+                                    value = currentReminderHour,
+                                    onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..12)) currentReminderHour = it },
+                                    label = { Text("HH") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.width(68.dp).testTag("input_reminder_hour"),
+                                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                                )
+                                Text(" : ", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                                OutlinedTextField(
+                                    value = currentReminderMinute,
+                                    onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..59)) currentReminderMinute = it },
+                                    label = { Text("MM") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.width(68.dp).testTag("input_reminder_minute"),
+                                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clickable { currentAmPm = "AM" }
+                                            .background(if (currentAmPm == "AM") NeonPurple else Color.Transparent)
+                                            .padding(horizontal = 6.dp, vertical = 10.dp)
+                                    ) {
+                                        Text("AM", color = if (currentAmPm == "AM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clickable { currentAmPm = "PM" }
+                                            .background(if (currentAmPm == "PM") NeonPurple else Color.Transparent)
+                                            .padding(horizontal = 6.dp, vertical = 10.dp)
+                                    ) {
+                                        Text("PM", color = if (currentAmPm == "PM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = { 
+                                        if (currentReminderHour.isNotEmpty() && currentReminderMinute.isNotEmpty()) {
+                                            var hInt = currentReminderHour.toIntOrNull() ?: 8
+                                            if (hInt == 0) hInt = 12
+                                            var h24 = hInt
+                                            if (currentAmPm == "AM" && h24 == 12) h24 = 0
+                                            if (currentAmPm == "PM" && h24 < 12) h24 += 12
+                                            val h = h24.toString().padStart(2, '0')
+                                            val m = currentReminderMinute.padStart(2, '0')
+                                            val formattedTime = "$h:$m"
+                                            if (formattedTime !in reminderTimes) {
+                                                reminderTimes = reminderTimes + formattedTime
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.AddCircle, contentDescription = "Add Time", tint = NeonPurple)
+                                }
                             }
                         }
                     }
@@ -1430,7 +2110,7 @@ fun AddHabitDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.isNotEmpty()) {
+                    if (name.isNotBlank()) {
                         val finalTimes = if (reminderTimes.isEmpty()) {
                             var hInt = currentReminderHour.toIntOrNull() ?: 8
                             if (hInt == 0) hInt = 12
@@ -1444,21 +2124,24 @@ fun AddHabitDialog(
                             reminderTimes
                         }
                         val reminderTimeStr = if (isNotificationEnabled) finalTimes.joinToString(",") else null
-                        onConfirm(name, description, category, frequency, 1, reminderTimeStr, isNotificationEnabled)
+                        val finalCategory = if (category == "Custom" && customCategory.isNotBlank()) customCategory.trim() else category
+                        onConfirm(name.trim(), description.trim(), finalCategory, frequency, 1, reminderTimeStr, isNotificationEnabled)
                     }
                 },
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
                 modifier = Modifier.testTag("dialog_confirm_button")
             ) {
-                Text("Create")
+                Text("Create", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(
+            OutlinedButton(
                 onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.testTag("dialog_cancel_button")
             ) {
-                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
             }
         }
     )
@@ -1541,11 +2224,282 @@ fun ProfileMenuSheetContent(
                 .height(50.dp)
                 .testTag("logout_button")
         ) {
-            Icon(Icons.Default.Logout, contentDescription = "Logout")
+            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout")
             Spacer(modifier = Modifier.width(8.dp))
             Text("Log Out", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         
         Spacer(modifier = Modifier.height(32.dp))
     }
+}
+
+@Composable
+fun EditReminderDialog(
+    initialReminderTime: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String?) -> Unit
+) {
+    var reminderTimes by remember { mutableStateOf(initialReminderTime?.split(",")?.filter { it.isNotBlank() } ?: listOf<String>()) }
+    var currentReminderHour by remember { mutableStateOf("08") }
+    var currentReminderMinute by remember { mutableStateOf("00") }
+    var currentAmPm by remember { mutableStateOf("AM") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Reminder Time") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            ) {
+                val parseFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                val displayFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+                reminderTimes.forEach { time ->
+                    val displayTime = try {
+                        parseFormat.parse(time)?.let { displayFormat.format(it) } ?: time
+                    } catch(e: Exception) { time }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(displayTime)
+                        IconButton(onClick = { reminderTimes = reminderTimes.filter { it != time } }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove")
+                        }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = currentReminderHour,
+                        onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..12)) currentReminderHour = it },
+                        label = { Text("Hour") },
+                        modifier = Modifier.width(72.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    )
+                    Text(" : ", fontSize = 24.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                    OutlinedTextField(
+                        value = currentReminderMinute,
+                        onValueChange = { if (it.length <= 2 && (it.isEmpty() || (it.toIntOrNull() ?: 0) in 0..59)) currentReminderMinute = it },
+                        label = { Text("Min") },
+                        modifier = Modifier.width(72.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clickable { currentAmPm = "AM" }
+                                .background(if (currentAmPm == "AM") NeonPurple else Color.Transparent)
+                                .padding(horizontal = 8.dp, vertical = 12.dp)
+                        ) {
+                            Text("AM", color = if (currentAmPm == "AM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clickable { currentAmPm = "PM" }
+                                .background(if (currentAmPm == "PM") NeonPurple else Color.Transparent)
+                                .padding(horizontal = 8.dp, vertical = 12.dp)
+                        ) {
+                            Text("PM", color = if (currentAmPm == "PM") Color.White else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { 
+                            if (currentReminderHour.isNotEmpty() && currentReminderMinute.isNotEmpty()) {
+                                var hInt = currentReminderHour.toIntOrNull() ?: 8
+                                if (hInt == 0) hInt = 12
+                                var h24 = hInt
+                                if (currentAmPm == "AM" && h24 == 12) h24 = 0
+                                if (currentAmPm == "PM" && h24 < 12) h24 += 12
+                                val h = h24.toString().padStart(2, '0')
+                                val m = currentReminderMinute.padStart(2, '0')
+                                val formattedTime = "$h:$m"
+                                if (formattedTime !in reminderTimes) {
+                                    reminderTimes = reminderTimes + formattedTime
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Time", tint = NeonPurple)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalTimes = if (reminderTimes.isEmpty() && currentReminderHour.isNotEmpty() && currentReminderMinute.isNotEmpty()) {
+                        var hInt = currentReminderHour.toIntOrNull() ?: 8
+                        if (hInt == 0) hInt = 12
+                        var h24 = hInt
+                        if (currentAmPm == "AM" && h24 == 12) h24 = 0
+                        if (currentAmPm == "PM" && h24 < 12) h24 += 12
+                        val h = h24.toString().padStart(2, '0')
+                        val m = currentReminderMinute.padStart(2, '0')
+                        listOf("$h:$m")
+                    } else {
+                        reminderTimes
+                    }
+                    onConfirm(if (finalTimes.isEmpty()) null else finalTimes.joinToString(","))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun hasUsageStatsPermission(context: android.content.Context): Boolean {
+    val appOps = context.getSystemService(android.content.Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+        ?: return false
+    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        appOps.unsafeCheckOpNoThrow(
+            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            context.packageName
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        appOps.checkOpNoThrow(
+            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            context.packageName
+        )
+    }
+    return mode == android.app.AppOpsManager.MODE_ALLOWED
+}
+
+private fun getTodayScreenTimeMillis(context: android.content.Context): Long {
+    val usageStatsManager = context.getSystemService(android.content.Context.USAGE_STATS_SERVICE) as? android.app.usage.UsageStatsManager
+        ?: return 0L
+
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val startTime = cal.timeInMillis
+    val endTime = System.currentTimeMillis()
+
+    if (endTime <= startTime) return 0L
+    val maxPossibleTime = endTime - startTime
+
+    val ignoredPackages = setOf(
+        "com.android.systemui",
+        "android",
+        "com.google.android.permissioncontroller",
+        "com.android.permissioncontroller",
+        "com.android.settings.intelligence"
+    )
+
+    // Event type constants
+    val EVENT_ACTIVITY_RESUMED = 1
+    val EVENT_ACTIVITY_PAUSED = 2
+    val EVENT_SCREEN_INTERACTIVE = 15
+    val EVENT_SCREEN_NON_INTERACTIVE = 16
+    val EVENT_KEYGUARD_SHOWN = 17
+
+    var totalTime = 0L
+    var isScreenOn = true
+    var currentApp: String? = null
+    var appStartTime: Long? = null
+
+    try {
+        val usageEvents = usageStatsManager.queryEvents(startTime, endTime)
+        if (usageEvents != null) {
+            val event = android.app.usage.UsageEvents.Event()
+
+            while (usageEvents.hasNextEvent()) {
+                usageEvents.getNextEvent(event)
+                val pkg = event.packageName ?: ""
+                val type = event.eventType
+                val timeStamp = event.timeStamp
+
+                when (type) {
+                    EVENT_SCREEN_NON_INTERACTIVE, EVENT_KEYGUARD_SHOWN -> {
+                        if (isScreenOn && appStartTime != null) {
+                            if (timeStamp > appStartTime) {
+                                totalTime += (timeStamp - appStartTime)
+                            }
+                        }
+                        isScreenOn = false
+                        currentApp = null
+                        appStartTime = null
+                    }
+                    EVENT_SCREEN_INTERACTIVE -> {
+                        isScreenOn = true
+                        if (currentApp != null) {
+                            appStartTime = timeStamp
+                        }
+                    }
+                    EVENT_ACTIVITY_RESUMED -> {
+                        if (!ignoredPackages.contains(pkg)) {
+                            if (isScreenOn && currentApp != null && appStartTime != null) {
+                                if (timeStamp > appStartTime) {
+                                    totalTime += (timeStamp - appStartTime)
+                                }
+                            }
+                            currentApp = pkg
+                            appStartTime = if (isScreenOn) timeStamp else null
+                        }
+                    }
+                    EVENT_ACTIVITY_PAUSED -> {
+                        if (pkg == currentApp) {
+                            if (isScreenOn && appStartTime != null) {
+                                if (timeStamp > appStartTime) {
+                                    totalTime += (timeStamp - appStartTime)
+                                }
+                            }
+                            currentApp = null
+                            appStartTime = null
+                        }
+                    }
+                }
+            }
+
+            if (isScreenOn && currentApp != null && appStartTime != null) {
+                if (endTime > appStartTime) {
+                    totalTime += (endTime - appStartTime)
+                }
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+
+    if (totalTime == 0L) {
+        try {
+            val statsMap = usageStatsManager.queryAndAggregateUsageStats(startTime, endTime)
+            if (!statsMap.isNullOrEmpty()) {
+                for ((pkg, stat) in statsMap) {
+                    if (ignoredPackages.contains(pkg)) continue
+                    if (stat.totalTimeInForeground > 0) {
+                        totalTime += stat.totalTimeInForeground
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    return if (totalTime > maxPossibleTime) maxPossibleTime else totalTime
 }

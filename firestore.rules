@@ -3,30 +3,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users collection: each user can only read/write their own document
+    // Users collection: each user can only read/write their own document and subcollections
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // Habits collection: each user manages their own habits
     match /habits/{habitId} {
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
     // Habit logs: each user can manage logs tied to their habits
     match /habitLogs/{logId} {
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
     // Leaderboard: any authenticated user can read, only the system writes (via their own user doc)
-    // Users can read all leaderboard entries but only update their own
+    // Leaderboard: authenticated users can read all entries.
+    // Write restricted to own document with field-level validation to prevent score spoofing.
     match /leaderboard/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.score is int
+                   && request.resource.data.score >= 0
+                   && request.resource.data.score <= 100000
+                   && request.resource.data.displayName is string
+                   && request.resource.data.displayName.size() <= 50
+                   && request.resource.data.level is int
+                   && request.resource.data.level >= 1
+                   && request.resource.data.level <= 15;
     }
   }
 }

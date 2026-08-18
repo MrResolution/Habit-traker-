@@ -1,12 +1,15 @@
 package com.example.data
 
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.firstOrNull
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class HabitRepository(private val habitDao: HabitDao) {
+
+    private val toggleMutex = Mutex()
 
     val allHabits: Flow<List<Habit>> = habitDao.getAllHabits()
     val allLogs: Flow<List<HabitLog>> = habitDao.getAllLogs()
@@ -34,44 +37,46 @@ class HabitRepository(private val habitDao: HabitDao) {
     }
 
     suspend fun toggleHabitCompletion(habitId: Int, dateStr: String): Boolean {
-        // Fetch habit
-        val habit = habitDao.getHabitByIdSuspend(habitId) ?: return false
-
-        // Fetch logs for this habit
-        val existingLogs = habitDao.getLogsForHabit(habitId).firstOrNull() ?: emptyList()
-        val isAlreadyCompleted = existingLogs.any { it.date == dateStr }
-
-        if (isAlreadyCompleted) {
-            habitDao.deleteLog(habitId, dateStr)
-        } else {
-            habitDao.insertLog(HabitLog(habitId = habitId, date = dateStr))
-        }
-
-        // Recalculate streak and best streak
-        val updatedLogs = habitDao.getLogsForHabit(habitId).firstOrNull() ?: emptyList()
-        val (currentStreak, bestStreak) = calculateStreaks(updatedLogs, dateStr)
-
-        val updatedHabit = habit.copy(
-            streak = currentStreak,
-            bestStreak = maxOf(habit.bestStreak, bestStreak),
-            lastCompletedDate = if (!isAlreadyCompleted) dateStr else {
-                // Find latest completion date in remaining logs
-                updatedLogs.firstOrNull()?.date
+        return toggleMutex.withLock {
+            // Fetch habit
+            val habit = habitDao.getHabitByIdSuspend(habitId) ?: return@withLock false
+    
+            // Fetch logs for this habit
+            val existingLogs = habitDao.getLogsForHabitSuspend(habitId)
+            val isAlreadyCompleted = existingLogs.any { it.date == dateStr }
+    
+            if (isAlreadyCompleted) {
+                habitDao.deleteLog(habitId, dateStr)
+            } else {
+                habitDao.insertLog(HabitLog(habitId = habitId, date = dateStr))
             }
-        )
-        habitDao.updateHabit(updatedHabit)
-        return !isAlreadyCompleted
+    
+            // Recalculate streak and best streak
+            val updatedLogs = habitDao.getLogsForHabitSuspend(habitId)
+            val (currentStreak, bestStreak) = calculateStreaks(updatedLogs, dateStr, habit.frequency)
+    
+            val updatedHabit = habit.copy(
+                streak = currentStreak,
+                bestStreak = maxOf(habit.bestStreak, bestStreak),
+                lastCompletedDate = if (!isAlreadyCompleted) dateStr else {
+                    // Find latest completion date in remaining logs
+                    updatedLogs.firstOrNull()?.date
+                }
+            )
+            habitDao.updateHabit(updatedHabit)
+            !isAlreadyCompleted
+        }
     }
 
     /**
      * Calculates the current streak and longest (best) streak based on list of logs.
      * Logs are expected to be ordered by date desc.
      */
-    private fun calculateStreaks(logs: List<HabitLog>, todayStr: String): Pair<Int, Int> {
+    private fun calculateStreaks(logs: List<HabitLog>, todayStr: String, frequency: String = "Daily"): Pair<Int, Int> {
         val completedDates = logs.map { it.date }.distinct().sortedDescending()
         if (completedDates.isEmpty()) return Pair(0, 0)
 
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val today = try { sdf.parse(todayStr) } catch (e: Exception) { null } ?: return Pair(0, 0)
 
         // Calculate current streak
@@ -82,11 +87,23 @@ class HabitRepository(private val habitDao: HabitDao) {
         val todayFormatted = sdf.format(cal.time)
         cal.add(Calendar.DAY_OF_YEAR, -1)
         val yesterdayFormatted = sdf.format(cal.time)
+        val stepDays = if (frequency.equals("Weekly", ignoreCase = true)) 7 else 1
 
         val hasCompletedToday = completedDates.contains(todayFormatted)
-        val hasCompletedYesterday = completedDates.contains(yesterdayFormatted)
+        val hasCompletedPreviousPeriod = if (stepDays == 7) {
+            // For weekly, check if completed in the previous 7 days
+            val prevCal = Calendar.getInstance()
+            prevCal.time = today
+            (1..7).any { offset ->
+                prevCal.time = today
+                prevCal.add(Calendar.DAY_OF_YEAR, -offset)
+                completedDates.contains(sdf.format(prevCal.time))
+            }
+        } else {
+            completedDates.contains(yesterdayFormatted)
+        }
 
-        if (hasCompletedToday || hasCompletedYesterday) {
+        if (hasCompletedToday || hasCompletedPreviousPeriod) {
             var checkCal = Calendar.getInstance()
             if (hasCompletedToday) {
                 checkCal.time = today
@@ -99,7 +116,7 @@ class HabitRepository(private val habitDao: HabitDao) {
                 val checkStr = sdf.format(checkCal.time)
                 if (completedDates.contains(checkStr)) {
                     currentStreak++
-                    checkCal.add(Calendar.DAY_OF_YEAR, -1)
+                    checkCal.add(Calendar.DAY_OF_YEAR, -stepDays)
                 } else {
                     break
                 }
@@ -116,15 +133,15 @@ class HabitRepository(private val habitDao: HabitDao) {
         val chronologicalDates = completedDates.sorted()
         for (dateStr in chronologicalDates) {
             val currDate = Calendar.getInstance()
-            currDate.time = sdf.parse(dateStr)!!
+            currDate.time = try { sdf.parse(dateStr) ?: continue } catch (e: Exception) { continue }
 
             if (prevDate == null) {
                 tempStreak = 1
             } else {
                 val diffDays = getDaysDifference(prevDate, currDate)
-                if (diffDays == 1) {
+                if (diffDays == stepDays) {
                     tempStreak++
-                } else if (diffDays > 1) {
+                } else if (diffDays > stepDays) {
                     bestStreak = maxOf(bestStreak, tempStreak)
                     tempStreak = 1
                 }

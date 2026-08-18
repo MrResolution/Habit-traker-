@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,21 +36,37 @@ import com.example.ui.AuthViewModel
 import com.example.ui.theme.CyberTeal
 import com.example.ui.theme.NeonPurple
 
+import android.content.Context
+import android.content.ContextWrapper
+
+fun Context.findActivity(): Activity? {
+    var currentContext = this
+    while (currentContext is ContextWrapper) {
+        if (currentContext is Activity) return currentContext
+        currentContext = currentContext.baseContext
+    }
+    return null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(viewModel: AuthViewModel, isRegistration: Boolean) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = remember(context) { context.findActivity() }
 
-    var displayName by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var displayName by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var confirmPasswordVisible by rememberSaveable { mutableStateOf(false) }
 
     val error by viewModel.loginError.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    if (isRegistration) {
+        BackHandler { viewModel.switchToLogin() }
+    }
 
     MaterialTheme(colorScheme = lightColorScheme()) {
         Box(
@@ -188,6 +206,8 @@ fun AuthScreen(viewModel: AuthViewModel, isRegistration: Boolean) {
                             if (isRegistration) {
                                 if (password == confirmPassword) {
                                     viewModel.register(displayName, email, password)
+                                } else {
+                                    viewModel.setError("Passwords do not match")
                                 }
                             } else {
                                 viewModel.login(email, password)

@@ -47,8 +47,10 @@ class StreakMilestoneService(private val dao: StreakMilestoneDao) {
                 targetStreak = 30
             )
         )
-        // Note: insertMilestones has REPLACE strategy so it's safe to seed
-        dao.insertMilestones(initialMilestones)
+        // Only seed if the table is truly empty to preserve earned achievements
+        if (dao.getMilestoneCount() == 0) {
+            dao.insertMilestones(initialMilestones)
+        }
     }
 
     /**
@@ -68,7 +70,7 @@ class StreakMilestoneService(private val dao: StreakMilestoneDao) {
             "legend_30" to 30
         )
         
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
         for ((id, target) in milestones) {
             if (maxBestStreak >= target) {

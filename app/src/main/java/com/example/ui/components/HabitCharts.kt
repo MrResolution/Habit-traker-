@@ -44,23 +44,26 @@ fun WeeklyTrendChart(
     }
 
     // Process last 7 days completion rate
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val cal = Calendar.getInstance()
-    val weeklyRates = mutableListOf<Float>()
-    val dayLabels = mutableListOf<String>()
+    val (weeklyRates, dayLabels) = remember(logs, habitCount) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val cal = Calendar.getInstance()
+        val rates = mutableListOf<Float>()
+        val labels = mutableListOf<String>()
 
-    val tempCal = cal.clone() as Calendar
-    tempCal.add(Calendar.DAY_OF_YEAR, -6)
+        val tempCal = cal.clone() as Calendar
+        tempCal.add(Calendar.DAY_OF_YEAR, -6)
 
-    for (i in 0..6) {
-        val dateStr = sdf.format(tempCal.time)
-        val logsForDay = logs.filter { it.date == dateStr }.distinctBy { it.habitId }.size
-        val rate = if (habitCount > 0) logsForDay.toFloat() / habitCount else 0f
-        weeklyRates.add(rate)
+        for (i in 0..6) {
+            val dateStr = sdf.format(tempCal.time)
+            val logsForDay = logs.filter { it.date == dateStr }.distinctBy { it.habitId }.size
+            val rate = if (habitCount > 0) logsForDay.toFloat() / habitCount else 0f
+            rates.add(rate)
 
-        val dayName = SimpleDateFormat("E", Locale.getDefault()).format(tempCal.time)
-        dayLabels.add(dayName)
-        tempCal.add(Calendar.DAY_OF_YEAR, 1)
+            val dayName = SimpleDateFormat("E", Locale.getDefault()).format(tempCal.time)
+            labels.add(dayName)
+            tempCal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        Pair(rates, labels)
     }
 
     Column(
@@ -324,15 +327,16 @@ fun MonthlyHeatmapGrid(
     logs: List<HabitLog>,
     modifier: Modifier = Modifier
 ) {
-    // Generate a simple grid of last 28 days
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val cal = Calendar.getInstance()
-    cal.add(Calendar.DAY_OF_YEAR, -27) // 4 weeks ago
-
-    val days = mutableListOf<String>()
-    for (i in 0..27) {
-        days.add(sdf.format(cal.time))
-        cal.add(Calendar.DAY_OF_YEAR, 1)
+    val days = remember {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -27)
+        val result = mutableListOf<String>()
+        for (i in 0..27) {
+            result.add(sdf.format(cal.time))
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        result
     }
 
     Column(
@@ -355,6 +359,11 @@ fun MonthlyHeatmapGrid(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
+        // Pre-aggregate log counts by date for O(1) lookup
+        val logCountByDate = remember(logs) {
+            logs.groupBy { it.date }.mapValues { (_, logList) -> logList.distinctBy { it.habitId }.size }
+        }
+
         // Render 4 rows (weeks) of 7 squares
         Column(
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -366,7 +375,7 @@ fun MonthlyHeatmapGrid(
                     for (day in 0..6) {
                         val index = week * 7 + day
                         val dateStr = days[index]
-                        val doneCount = logs.filter { it.date == dateStr }.distinctBy { it.habitId }.size
+                        val doneCount = logCountByDate[dateStr] ?: 0
 
                         // Color intensity based on habits done on that day
                         val squareColor = when {

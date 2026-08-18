@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Habit::class, HabitLog::class, StreakMilestone::class, User::class], version = 3, exportSchema = false)
+@Database(entities = [Habit::class, HabitLog::class, StreakMilestone::class, User::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun habitDao(): HabitDao
     abstract fun streakMilestoneDao(): StreakMilestoneDao
@@ -22,6 +22,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "habit_tracker_database"
                 )
+                // TODO: Before production release, replace with proper Migration objects
+                // to prevent data loss on schema upgrades.
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

@@ -127,6 +127,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signInWithGoogle(activityContext: android.app.Activity) {
         _isLoading.value = true
+        _loginError.value = null
         viewModelScope.launch {
             try {
                 val credentialManager = CredentialManager.create(activityContext)
@@ -134,6 +135,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val googleIdOption = GetGoogleIdOption.Builder()
                     .setFilterByAuthorizedAccounts(false)
                     .setServerClientId(WEB_CLIENT_ID)
+                    .setAutoSelectEnabled(false)
                     .build()
 
                 val request = GetCredentialRequest.Builder()
@@ -146,12 +148,26 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 handleGoogleSignInResult(result)
+            } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
+                Log.d(TAG, "Google Sign-In cancelled by user")
+                _loginError.value = null
+                _isLoading.value = false
+            } catch (e: androidx.credentials.exceptions.NoCredentialException) {
+                Log.e(TAG, "No Google accounts available", e)
+                _loginError.value = "No Google account found on this device"
+                _isLoading.value = false
+            } catch (e: androidx.credentials.exceptions.GetCredentialProviderConfigurationException) {
+                Log.e(TAG, "Google Sign-In provider configuration exception", e)
+                _loginError.value = "Google Sign-In is not configured properly"
+                _isLoading.value = false
             } catch (e: GetCredentialException) {
                 Log.e(TAG, "Google Sign-In failed", e)
                 _loginError.value = "Google Sign-In failed: ${e.localizedMessage}"
                 _isLoading.value = false
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Google Sign-In failed", e)
+                Log.e(TAG, "Google Sign-In failed unexpectedly", e)
                 _loginError.value = e.localizedMessage ?: "Google Sign-In failed"
                 _isLoading.value = false
             }
@@ -161,12 +177,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun handleGoogleSignInResult(result: GetCredentialResponse) {
         val credential = result.credential
 
-        if (credential is CustomCredential &&
-            credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-        ) {
-            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-            val firebaseCredential = GoogleAuthProvider.getCredential(googleIdTokenCredential.idToken, null)
+        val idToken = try {
+            if (credential is CustomCredential &&
+                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+            ) {
+                GoogleIdTokenCredential.createFrom(credential.data).idToken
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse Google ID token", e)
+            null
+        }
 
+        if (idToken != null) {
+            val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
             try {
                 val authResult = auth.signInWithCredential(firebaseCredential).await()
                 val user = authResult.user
@@ -178,10 +201,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Firebase auth with Google credential failed", e)
-                _loginError.value = e.localizedMessage ?: "Authentication failed"
+                _loginError.value = e.localizedMessage ?: "Authentication with Google failed"
             }
         } else {
-            _loginError.value = "Unexpected credential type"
+            _loginError.value = "Failed to retrieve valid Google ID token"
         }
         _isLoading.value = false
     }
@@ -240,6 +263,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         _loginError.value = null
     }
 
+    fun setError(message: String) {
+        _loginError.value = message
+    }
+
     fun getCurrentUserId(): String? = auth.currentUser?.uid
 
     suspend fun checkIsOnboardingComplete(): Boolean {
@@ -258,6 +285,22 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             db.collection("users").document(uid).update("onboardingComplete", true).await()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to update onboarding status", e)
+        }
+    }
+
+    suspend fun updateDisplayName(newName: String) {
+        val user = auth.currentUser ?: return
+        try {
+            val profileUpdates = userProfileChangeRequest {
+                displayName = newName
+            }
+            user.updateProfile(profileUpdates).await()
+            db.collection("users").document(user.uid).update("displayName", newName).await()
+            db.collection("leaderboard").document(user.uid).update("displayName", newName).await()
+            
+            _authState.value = AuthState.Authenticated(user)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update display name", e)
         }
     }
 }
