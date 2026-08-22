@@ -1,21 +1,55 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Habit Tracker
 
-# Run and deploy your AI Studio app
+A modern, feature-rich Android Habit Tracker application built with Kotlin and Jetpack Compose. This app helps users build and maintain positive habits through consistency tracking, smart reminders, and a beautiful UI.
 
-This contains everything you need to run your app locally.
+## 🌟 Features
 
-View your app in AI Studio: https://ai.studio/apps/ecbb4578-4f54-4659-8333-c53bf9b1224a
+* **Beautiful UI/UX:** Built entirely with Jetpack Compose, featuring a clean, responsive design, custom flat vector illustrations, and a dedicated Light Mode login experience.
+* **Smart Habit Tracking:** Track your daily habits, view your consistency map, and stay on top of your goals.
+* **Personalized Onboarding:** Tailored post-login onboarding flow with profession selection and curated habit suggestions.
+* **Frequent Reminders:** Receive timely, custom notifications throughout the day to ensure you never miss a habit.
+* **Firebase Integration:** 
+  * **Authentication:** Secure login and user management.
+  * **Firestore:** Sync your onboarding status and habit data seamlessly across devices (persists across reinstalls).
+  * **Hosting:** Self-hosted in-app updates with an automated release pipeline.
 
-## Run Locally
+## 🛠️ Tech Stack
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+* **Language:** Kotlin
+* **UI Toolkit:** Jetpack Compose
+* **Backend:** Firebase (Auth, Firestore, Hosting)
+* **Architecture:** Modern Android Architecture (MVVM/MVI)
 
+## 🚀 Getting Started
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+### Prerequisites
+
+* [Android Studio](https://developer.android.com/studio) (Latest version recommended)
+* A Firebase Project configured for Android.
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone <your-repository-url>
+   ```
+2. **Open the project in Android Studio:**
+   Select **File > Open** and choose the cloned directory.
+3. **Configure Firebase:**
+   Make sure you have your `google-services.json` file placed in the `app/` directory (if not already included).
+4. **Environment Variables:**
+   Create a file named `.env` in the project root and add your API keys (see `.env.example` for reference).
+5. **Run the App:**
+   Select your emulator or physical device and click **Run**.
+
+## 🗺️ Roadmap
+
+Check out the [devlog.md](devlog.md) for a detailed history of our recent updates and planned features, which include:
+* Interactive Consistency Map
+* Home Screen Widgets
+* Smart Reward System (AI Automation)
+* Intelligent Notifications based on Screen Time
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
